@@ -222,7 +222,7 @@ class _ArchivedThreadListRow extends StatelessWidget {
         child: ThreadListRow(
           thread: thread,
           onTap: () {
-            context.go(
+            context.push(
               AppRoutes.threadDetail(
                 thread.chatId,
                 thread.threadRootId.toString(),
