@@ -627,6 +627,36 @@ abstract class AppLocalizations {
   /// **'Reply to this message to start the thread.'**
   String get newThreadInstruction;
 
+  /// Accessibility label for the thread detail bell action when the user is not subscribed
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe to thread'**
+  String get subscribeThreadAction;
+
+  /// Accessibility label for the thread detail bell action when the thread is active
+  ///
+  /// In en, this message translates to:
+  /// **'Archive thread'**
+  String get archiveThreadAction;
+
+  /// Accessibility label for the thread detail bell action when the thread is archived
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive thread'**
+  String get unarchiveThreadAction;
+
+  /// Confirmation dialog title before unarchiving a thread from the detail page
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive thread?'**
+  String get unarchiveThreadTitle;
+
+  /// Confirmation dialog message before unarchiving a thread from the detail page
+  ///
+  /// In en, this message translates to:
+  /// **'This thread will move back to Threads. Continue?'**
+  String get unarchiveThreadMessage;
+
   /// Empty state for the group chat list
   ///
   /// In en, this message translates to:

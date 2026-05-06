@@ -265,6 +265,21 @@
   "newThreadInstruction": "Reply to this message to start the thread.",
   "@newThreadInstruction": { "description": "Instruction shown above a new thread composer" },
 
+  "subscribeThreadAction": "Subscribe to thread",
+  "@subscribeThreadAction": { "description": "Accessibility label for the thread detail bell action when the user is not subscribed" },
+
+  "archiveThreadAction": "Archive thread",
+  "@archiveThreadAction": { "description": "Accessibility label for the thread detail bell action when the thread is active" },
+
+  "unarchiveThreadAction": "Unarchive thread",
+  "@unarchiveThreadAction": { "description": "Accessibility label for the thread detail bell action when the thread is archived" },
+
+  "unarchiveThreadTitle": "Unarchive thread?",
+  "@unarchiveThreadTitle": { "description": "Confirmation dialog title before unarchiving a thread from the detail page" },
+
+  "unarchiveThreadMessage": "This thread will move back to Threads. Continue?",
+  "@unarchiveThreadMessage": { "description": "Confirmation dialog message before unarchiving a thread from the detail page" },
+
   "noGroupsYet": "No groups yet",
   "@noGroupsYet": { "description": "Empty state for the group chat list" },
 

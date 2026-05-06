@@ -1,3 +1,4 @@
+import 'package:chahua/features/conversation/shared/application/thread_detail_membership_view_model.dart';
 import 'package:chahua/features/conversation/shared/domain/conversation_identity.dart';
 import 'package:chahua/features/conversation/shared/domain/launch_request.dart';
 import 'package:chahua/features/conversation/shared/presentation/conversation_surface_v2.dart';
@@ -30,12 +31,20 @@ class ThreadDetailV2Page extends ConsumerStatefulWidget {
 class _ThreadDetailV2PageState extends ConsumerState<ThreadDetailV2Page> {
   late bool _isNewThread = widget.isNewThread;
 
+  ThreadDetailMembershipIdentity get _membershipIdentity =>
+      (chatId: widget.chatId, threadRootId: widget.threadRootId);
+
   Future<void> _handleMessageSent() async {
     if (!_isNewThread) {
       return;
     }
     // Backend auto-subscribes on the first thread reply; websocket
     // reconciliation owns refreshing active and archived thread lists.
+    ref
+        .read(
+          threadDetailMembershipViewModelProvider(_membershipIdentity).notifier,
+        )
+        .markSubscribedFromReply();
     if (mounted) {
       setState(() {
         _isNewThread = false;
@@ -56,7 +65,7 @@ class _ThreadDetailV2PageState extends ConsumerState<ThreadDetailV2Page> {
       navigationBar: CupertinoNavigationBar(
         automaticallyImplyLeading: !isSplitLayout || widget.implyLeadingInSplit,
         middle: Text(_isNewThread ? l10n.newThread : l10n.thread),
-        // TODO: Add the thread subscribe button here once the Flutter UI is ready.
+        trailing: _ThreadMembershipButton(identity: _membershipIdentity),
       ),
       child: SafeArea(
         bottom: false,
@@ -75,6 +84,108 @@ class _ThreadDetailV2PageState extends ConsumerState<ThreadDetailV2Page> {
         ),
       ),
     );
+  }
+}
+
+class _ThreadMembershipButton extends ConsumerWidget {
+  const _ThreadMembershipButton({required this.identity});
+
+  final ThreadDetailMembershipIdentity identity;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncState = ref.watch(
+      threadDetailMembershipViewModelProvider(identity),
+    );
+    final l10n = AppLocalizations.of(context)!;
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: asyncState.maybeWhen(
+        data: (state) => CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: state.isMutating
+              ? null
+              : () => _handlePressed(context, ref, state),
+          child: state.isMutating
+              ? const CupertinoActivityIndicator(radius: 9)
+              : Semantics(
+                  label: _semanticLabel(l10n, state),
+                  button: true,
+                  child: Icon(
+                    state.membership == ThreadMembershipState.active
+                        ? CupertinoIcons.bell_fill
+                        : CupertinoIcons.bell_slash,
+                    color: state.membership == ThreadMembershipState.active
+                        ? CupertinoColors.activeBlue.resolveFrom(context)
+                        : CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+        ),
+        loading: () =>
+            const Center(child: CupertinoActivityIndicator(radius: 9)),
+        orElse: () => CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: () =>
+              ref.invalidate(threadDetailMembershipViewModelProvider(identity)),
+          child: Icon(
+            CupertinoIcons.bell_slash,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePressed(
+    BuildContext context,
+    WidgetRef ref,
+    ThreadDetailMembershipViewState state,
+  ) async {
+    if (state.membership == ThreadMembershipState.archived) {
+      final confirmed = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (context) {
+          final l10n = AppLocalizations.of(context)!;
+          return CupertinoAlertDialog(
+            title: Text(l10n.unarchiveThreadTitle),
+            content: Text(l10n.unarchiveThreadMessage),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(l10n.ok),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true) {
+        return;
+      }
+    }
+
+    await ref
+        .read(threadDetailMembershipViewModelProvider(identity).notifier)
+        .performBellAction();
+  }
+
+  String _semanticLabel(
+    AppLocalizations l10n,
+    ThreadDetailMembershipViewState state,
+  ) {
+    switch (state.membership) {
+      case ThreadMembershipState.notSubscribed:
+        return l10n.subscribeThreadAction;
+      case ThreadMembershipState.active:
+        return l10n.archiveThreadAction;
+      case ThreadMembershipState.archived:
+        return l10n.unarchiveThreadAction;
+    }
   }
 }
 

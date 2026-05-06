@@ -278,6 +278,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'Reply to this message to start the thread.';
 
   @override
+  String get subscribeThreadAction => 'Subscribe to thread';
+
+  @override
+  String get archiveThreadAction => 'Archive thread';
+
+  @override
+  String get unarchiveThreadAction => 'Unarchive thread';
+
+  @override
+  String get unarchiveThreadTitle => 'Unarchive thread?';
+
+  @override
+  String get unarchiveThreadMessage =>
+      'This thread will move back to Threads. Continue?';
+
+  @override
   String get noGroupsYet => 'No groups yet';
 
   @override

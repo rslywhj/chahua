@@ -273,6 +273,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newThreadInstruction => '回复这条消息以开始话题。';
 
   @override
+  String get subscribeThreadAction => '订阅话题';
+
+  @override
+  String get archiveThreadAction => '归档话题';
+
+  @override
+  String get unarchiveThreadAction => '取消归档话题';
+
+  @override
+  String get unarchiveThreadTitle => '取消归档话题？';
+
+  @override
+  String get unarchiveThreadMessage => '这个话题会移回话题列表。继续吗？';
+
+  @override
   String get noGroupsYet => '暂无群组';
 
   @override
@@ -696,6 +711,21 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get newThreadInstruction => '回覆這則訊息以開始話題。';
+
+  @override
+  String get subscribeThreadAction => '訂閱話題';
+
+  @override
+  String get archiveThreadAction => '封存話題';
+
+  @override
+  String get unarchiveThreadAction => '取消封存話題';
+
+  @override
+  String get unarchiveThreadTitle => '取消封存話題？';
+
+  @override
+  String get unarchiveThreadMessage => '這個話題會移回話題列表。要繼續嗎？';
 
   @override
   String get noGroupsYet => '暫無群組';
