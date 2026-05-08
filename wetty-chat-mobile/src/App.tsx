@@ -25,6 +25,7 @@ import { syncJwtTokenToIdb } from '@/utils/jwtToken';
 import { useDeviceToken } from './hooks/useDeviceToken';
 import { appHistory } from '@/utils/navigationHistory';
 import { useNotificationOpenHandler } from '@/hooks/useNotificationOpenHandler';
+import { PendingInviteModalHost } from '@/components/invites/PendingInviteModalHost';
 
 const OOBE_STORAGE_KEY = 'oobe';
 
@@ -79,7 +80,12 @@ function AppRouter({ isDesktop }: { isDesktop: boolean }) {
     return <Redirect to="/oobe" />;
   }
 
-  return isDesktop ? <DesktopSplitLayout /> : <MobileLayout />;
+  return (
+    <>
+      {isDesktop ? <DesktopSplitLayout /> : <MobileLayout />}
+      <PendingInviteModalHost />
+    </>
+  );
 }
 
 function AppShell() {

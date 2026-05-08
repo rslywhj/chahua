@@ -9,9 +9,14 @@ import styles from './InviteMessageModal.module.scss';
 interface InviteMessageModalProps {
   inviteCode: string | null;
   onDismiss: () => void;
+  showAlreadyMemberOpenChatAction?: boolean;
 }
 
-export function InviteMessageModal({ inviteCode, onDismiss }: InviteMessageModalProps) {
+export function InviteMessageModal({
+  inviteCode,
+  onDismiss,
+  showAlreadyMemberOpenChatAction = true,
+}: InviteMessageModalProps) {
   const isDesktop = useIsDesktop();
   const history = useHistory();
 
@@ -30,6 +35,7 @@ export function InviteMessageModal({ inviteCode, onDismiss }: InviteMessageModal
           <div className={styles.card}>
             <InvitePreviewCard
               inviteCode={inviteCode}
+              showAlreadyMemberOpenChatAction={showAlreadyMemberOpenChatAction}
               onResolved={(chat) => {
                 onDismiss();
                 history.replace(`/chats/chat/${chat.id}`);

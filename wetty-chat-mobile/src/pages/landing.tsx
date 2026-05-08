@@ -12,7 +12,7 @@ import {
   IonToolbar,
   isPlatform,
 } from '@ionic/react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import {
   ellipsisHorizontal,
   ellipsisVertical,
@@ -24,8 +24,9 @@ import {
 } from 'ionicons/icons';
 import './landing.scss';
 import { useLocation } from 'react-router';
+import { PendingInviteModal } from '@/components/invites/PendingInviteModal';
+import { useLandingInviteFlow } from '@/hooks/useLandingInviteFlow';
 import { useIsPWA } from '@/hooks/platformHooks';
-import { syncJwtTokenFromLanding } from '@/utils/jwtToken';
 
 type PlatformId = 'android' | 'ios' | 'windows' | 'macos' | 'linux';
 
@@ -81,20 +82,18 @@ export default function LandingPage() {
   const isPwa = useIsPWA();
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>(detectedPlatform);
   const location = useLocation();
-
-  useEffect(() => {
-    syncJwtTokenFromLanding(location.search);
-
-    if (!isPwa) {
-      return;
-    }
-
+  const appEntryUrl = useMemo(() => {
     const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
     appUrl.pathname = `${import.meta.env.BASE_URL.replace(/\/$/, '')}${APP_ENTRY_ROUTE}`;
     appUrl.search = '';
     appUrl.hash = '';
-    window.location.replace(appUrl.toString());
-  }, [isPwa, location.search]);
+    return appUrl.toString();
+  }, []);
+  const { landingInviteCode, clearLandingInvite } = useLandingInviteFlow({
+    search: location.search,
+    isPwa,
+    appEntryUrl,
+  });
 
   if (isPwa) {
     return (
@@ -237,6 +236,7 @@ export default function LandingPage() {
           </IonCard>
         </section>
       </IonContent>
+      <PendingInviteModal inviteCode={landingInviteCode} onCleared={clearLandingInvite} />
     </IonPage>
   );
 }

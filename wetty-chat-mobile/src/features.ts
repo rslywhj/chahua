@@ -19,6 +19,14 @@ export const FEATURES = {
     enabled: false,
     description: 'Shows the chat attachments section in the group info page.',
   },
+  landingInviteModal: {
+    enabled: false,
+    description: 'Shows invite preview and redeem modal on the install landing page.',
+  },
+  pendingInvitePwaModal: {
+    enabled: false,
+    description: 'Stores landing auth/invite state for PWA handoff and shows pending invites inside the installed app.',
+  },
 } as const;
 
 export type Feature = keyof typeof FEATURES;
