@@ -12,6 +12,7 @@ This repository contains three apps plus shared docs and API collections. `backe
 ## API Serialization
 - All API should use camel case for field naming
 - use `#[serde(rename_all="camelCase")]
+- Data transfer objects are stored in the `dto` submodule.
 
 ## Database & Index
 
