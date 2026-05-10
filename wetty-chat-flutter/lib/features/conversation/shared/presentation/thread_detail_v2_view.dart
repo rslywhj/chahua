@@ -90,6 +90,9 @@ class _ThreadDetailV2PageState extends ConsumerState<ThreadDetailV2Page> {
 class _ThreadMembershipButton extends ConsumerWidget {
   const _ThreadMembershipButton({required this.identity});
 
+  static const _buttonSize = 36.0;
+  static const _iconSize = 26.0;
+
   final ThreadDetailMembershipIdentity identity;
 
   @override
@@ -100,8 +103,8 @@ class _ThreadMembershipButton extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
 
     return SizedBox(
-      width: 44,
-      height: 44,
+      width: _buttonSize,
+      height: _buttonSize,
       child: asyncState.maybeWhen(
         data: (state) => CupertinoButton(
           padding: EdgeInsets.zero,
@@ -117,6 +120,7 @@ class _ThreadMembershipButton extends ConsumerWidget {
                     state.membership == ThreadMembershipState.active
                         ? CupertinoIcons.bell_fill
                         : CupertinoIcons.bell_slash,
+                    size: _iconSize,
                     color: state.membership == ThreadMembershipState.active
                         ? CupertinoColors.activeBlue.resolveFrom(context)
                         : CupertinoColors.secondaryLabel.resolveFrom(context),
@@ -131,6 +135,7 @@ class _ThreadMembershipButton extends ConsumerWidget {
               ref.invalidate(threadDetailMembershipViewModelProvider(identity)),
           child: Icon(
             CupertinoIcons.bell_slash,
+            size: _iconSize,
             color: CupertinoColors.secondaryLabel.resolveFrom(context),
           ),
         ),

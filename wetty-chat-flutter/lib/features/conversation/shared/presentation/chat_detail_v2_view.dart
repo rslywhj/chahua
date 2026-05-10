@@ -63,6 +63,9 @@ class ChatDetailV2Page extends StatelessWidget {
 class _ChatDetailActions extends StatelessWidget {
   const _ChatDetailActions({required this.chatId});
 
+  static const _buttonSize = Size.square(36);
+  static const _iconSize = 26.0;
+
   final int chatId;
 
   @override
@@ -71,18 +74,19 @@ class _ChatDetailActions extends StatelessWidget {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
+      spacing: 8,
       children: [
         CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          minimumSize: const Size.square(36),
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          minimumSize: _buttonSize,
           onPressed: () => context.push(AppRoutes.chatMembers(routeChatId)),
-          child: const Icon(CupertinoIcons.person_2),
+          child: const Icon(CupertinoIcons.person_2_fill, size: _iconSize),
         ),
         CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          minimumSize: const Size.square(36),
+          padding: const EdgeInsets.symmetric(horizontal: 0),
+          minimumSize: _buttonSize,
           onPressed: () => context.push(AppRoutes.chatSettings(routeChatId)),
-          child: const Icon(CupertinoIcons.info_circle),
+          child: const Icon(CupertinoIcons.info_circle, size: _iconSize),
         ),
       ],
     );

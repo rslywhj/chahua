@@ -33,7 +33,7 @@ class ThreadIndicator extends StatelessWidget {
               : MainAxisAlignment.start,
           children: [
             Icon(
-              CupertinoIcons.chat_bubble_2,
+              CupertinoIcons.chat_bubble_2_fill,
               size: 12,
               color: theme.textColor,
             ),
