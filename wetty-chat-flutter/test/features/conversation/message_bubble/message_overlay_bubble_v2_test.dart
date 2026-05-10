@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('overlay bubble renders message text as selectable', (
+  testWidgets('overlay bubble renders main message text as selectable', (
     tester,
   ) async {
     await _pumpWithSettings(
@@ -22,7 +22,7 @@ void main() {
           message: _textMessage(),
           bubbleRect: const Rect.fromLTWH(0, 0, 240, 80),
           isMe: false,
-          sourceShowsSenderName: false,
+          sourceShowsSenderName: true,
         ),
       ),
     );

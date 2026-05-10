@@ -3,7 +3,6 @@ import 'package:chahua/features/conversation/timeline/model/message_long_press_d
 import 'package:chahua/features/shared/model/message/message.dart'
     hide MessageItem;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show SelectionArea;
 
 class MessageOverlayBubbleV2 extends StatelessWidget {
   const MessageOverlayBubbleV2({super.key, required this.details});
@@ -27,7 +26,7 @@ class MessageOverlayBubbleV2 extends StatelessWidget {
       ),
     );
     if (isTextSelectable) {
-      return SelectionArea(child: bubble);
+      return bubble;
     }
     return IgnorePointer(child: bubble);
   }

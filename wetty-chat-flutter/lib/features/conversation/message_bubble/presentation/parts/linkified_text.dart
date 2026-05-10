@@ -2,6 +2,7 @@ import 'package:chahua/app/theme/style_config.dart';
 import 'package:chahua/features/shared/model/message/message.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart' show SelectionArea;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/bubble_theme_v2.dart';
@@ -43,7 +44,11 @@ class LinkifiedText extends StatelessWidget {
         WidgetSpan(child: SizedBox(width: theme.timeSpacerWidth, height: 14)),
       ],
     );
-    return Text.rich(span);
+    final text = Text.rich(span);
+    if (theme.isTextSelectable) {
+      return SelectionArea(child: text);
+    }
+    return text;
   }
 
   List<InlineSpan> _buildLinkedSpans(
