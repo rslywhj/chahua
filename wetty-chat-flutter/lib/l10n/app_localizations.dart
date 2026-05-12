@@ -495,29 +495,17 @@ abstract class AppLocalizations {
   /// **'Message'**
   String get message;
 
-  /// Attachment source label for photos
+  /// Attachment source label for capturing a photo with the camera
   ///
   /// In en, this message translates to:
-  /// **'Photos'**
-  String get photos;
+  /// **'Camera'**
+  String get camera;
 
-  /// Attachment source label for GIFs
+  /// Attachment source label for choosing photos or videos from the library
   ///
   /// In en, this message translates to:
-  /// **'GIFs'**
-  String get gifs;
-
-  /// Attachment source label for videos
-  ///
-  /// In en, this message translates to:
-  /// **'Videos'**
-  String get videos;
-
-  /// Attachment source label for files
-  ///
-  /// In en, this message translates to:
-  /// **'Files'**
-  String get files;
+  /// **'Media'**
+  String get media;
 
   /// Message action label for replying
   ///

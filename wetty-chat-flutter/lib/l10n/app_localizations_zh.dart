@@ -207,16 +207,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get message => '消息';
 
   @override
-  String get photos => '照片';
+  String get camera => '相机';
 
   @override
-  String get gifs => 'GIF 动图';
-
-  @override
-  String get videos => '视频';
-
-  @override
-  String get files => '文件';
+  String get media => '照片与视频';
 
   @override
   String get reply => '回复';
@@ -650,16 +644,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get message => '訊息';
 
   @override
-  String get photos => '照片';
+  String get camera => '相機';
 
   @override
-  String get gifs => 'GIF 動圖';
-
-  @override
-  String get videos => '影片';
-
-  @override
-  String get files => '檔案';
+  String get media => '照片與影片';
 
   @override
   String get reply => '回覆';

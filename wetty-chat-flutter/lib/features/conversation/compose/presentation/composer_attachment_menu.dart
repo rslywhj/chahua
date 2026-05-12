@@ -42,26 +42,14 @@ class ComposerAttachmentMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _AttachmentSourceAction(
-              label: AppLocalizations.of(context)!.photos,
-              source: ComposerAttachmentSource.photos,
+              label: AppLocalizations.of(context)!.camera,
+              source: ComposerAttachmentSource.cameraPhoto,
               showDivider: true,
               onTap: onPickAttachments,
             ),
             _AttachmentSourceAction(
-              label: AppLocalizations.of(context)!.gifs,
-              source: ComposerAttachmentSource.gifs,
-              showDivider: true,
-              onTap: onPickAttachments,
-            ),
-            _AttachmentSourceAction(
-              label: AppLocalizations.of(context)!.videos,
-              source: ComposerAttachmentSource.videos,
-              showDivider: true,
-              onTap: onPickAttachments,
-            ),
-            _AttachmentSourceAction(
-              label: AppLocalizations.of(context)!.files,
-              source: ComposerAttachmentSource.files,
+              label: AppLocalizations.of(context)!.media,
+              source: ComposerAttachmentSource.mediaLibrary,
               showDivider: false,
               onTap: onPickAttachments,
             ),
@@ -125,10 +113,9 @@ class _AttachmentSourceAction extends StatelessWidget {
 
   IconData _sourceIcon(ComposerAttachmentSource source) {
     return switch (source) {
-      ComposerAttachmentSource.photos => CupertinoIcons.photo_on_rectangle,
-      ComposerAttachmentSource.gifs => CupertinoIcons.sparkles,
-      ComposerAttachmentSource.videos => CupertinoIcons.videocam_fill,
-      ComposerAttachmentSource.files => CupertinoIcons.doc_fill,
+      ComposerAttachmentSource.cameraPhoto => CupertinoIcons.camera_fill,
+      ComposerAttachmentSource.mediaLibrary =>
+        CupertinoIcons.photo_on_rectangle,
     };
   }
 }

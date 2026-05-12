@@ -199,17 +199,11 @@
   "message": "Message",
   "@message": { "description": "Composer placeholder for a text message" },
 
-  "photos": "Photos",
-  "@photos": { "description": "Attachment source label for photos" },
+  "camera": "Camera",
+  "@camera": { "description": "Attachment source label for capturing a photo with the camera" },
 
-  "gifs": "GIFs",
-  "@gifs": { "description": "Attachment source label for GIFs" },
-
-  "videos": "Videos",
-  "@videos": { "description": "Attachment source label for videos" },
-
-  "files": "Files",
-  "@files": { "description": "Attachment source label for files" },
+  "media": "Media",
+  "@media": { "description": "Attachment source label for choosing photos or videos from the library" },
 
   "reply": "Reply",
   "@reply": { "description": "Message action label for replying" },

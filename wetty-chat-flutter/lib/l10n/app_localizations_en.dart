@@ -210,16 +210,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get message => 'Message';
 
   @override
-  String get photos => 'Photos';
+  String get camera => 'Camera';
 
   @override
-  String get gifs => 'GIFs';
-
-  @override
-  String get videos => 'Videos';
-
-  @override
-  String get files => 'Files';
+  String get media => 'Media';
 
   @override
   String get reply => 'Reply';

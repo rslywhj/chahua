@@ -4,13 +4,15 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:path/path.dart' as path;
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
-enum ComposerAttachmentKind { image, gif, video, file }
+enum ComposerAttachmentKind { image, gif, video }
 
-enum ComposerAttachmentSource { photos, gifs, videos, files }
+enum ComposerAttachmentSource { cameraPhoto, mediaLibrary }
 
 class PickedComposerAttachment {
   const PickedComposerAttachment({
@@ -37,33 +39,43 @@ class PickedComposerAttachment {
 }
 
 class AttachmentPickerService {
-  static const List<String> _gifExtensions = <String>['gif'];
+  AttachmentPickerService({ImagePicker? imagePicker})
+    : _imagePicker = imagePicker ?? ImagePicker();
+
+  final ImagePicker _imagePicker;
 
   Future<List<PickedComposerAttachment>> pick(
     ComposerAttachmentSource source,
   ) async {
-    final result = await FilePicker.pickFiles(
-      allowMultiple: true,
-      withData: _needsPreviewBytes(source),
-      withReadStream: true,
-      type: switch (source) {
-        ComposerAttachmentSource.photos => FileType.image,
-        ComposerAttachmentSource.gifs => FileType.custom,
-        ComposerAttachmentSource.videos => FileType.video,
-        ComposerAttachmentSource.files => FileType.any,
-      },
-      allowedExtensions: switch (source) {
-        ComposerAttachmentSource.gifs => _gifExtensions,
-        _ => null,
-      },
-    );
-    if (result == null) {
+    return switch (source) {
+      ComposerAttachmentSource.cameraPhoto => _pickCameraPhoto(),
+      ComposerAttachmentSource.mediaLibrary => _pickMediaLibrary(),
+    };
+  }
+
+  Future<List<PickedComposerAttachment>> _pickCameraPhoto() async {
+    final photo = await _imagePicker.pickImage(source: ImageSource.camera);
+    if (photo == null) {
       return const <PickedComposerAttachment>[];
     }
+    return _toPickedAttachments(<XFile>[
+      photo,
+    ], ComposerAttachmentSource.cameraPhoto);
+  }
 
+  Future<List<PickedComposerAttachment>> _pickMediaLibrary() async {
+    final media = await _imagePicker.pickMultipleMedia();
+    return _toPickedAttachments(media, ComposerAttachmentSource.mediaLibrary);
+  }
+
+  Future<List<PickedComposerAttachment>> _toPickedAttachments(
+    List<XFile> files,
+    ComposerAttachmentSource source,
+  ) async {
     final attachments = <PickedComposerAttachment>[];
-    for (final file in result.files) {
-      final attachment = await _toPickedAttachment(file, source);
+    for (final xFile in files) {
+      final platformFile = await _toPlatformFile(xFile);
+      final attachment = await _toPickedAttachment(platformFile, source);
       if (attachment != null) {
         attachments.add(attachment);
       }
@@ -71,13 +83,39 @@ class AttachmentPickerService {
     return attachments;
   }
 
-  bool _needsPreviewBytes(ComposerAttachmentSource source) {
-    return switch (source) {
-      ComposerAttachmentSource.photos => true,
-      ComposerAttachmentSource.gifs => true,
-      ComposerAttachmentSource.videos => false,
-      ComposerAttachmentSource.files => false,
-    };
+  Future<PlatformFile> _toPlatformFile(XFile xFile) async {
+    final size = await xFile.length();
+    final bytes = await _previewCandidateBytesFor(xFile);
+    return PlatformFile(
+      name: _fileNameFor(xFile),
+      size: size,
+      path: xFile.path,
+      bytes: bytes,
+      readStream: xFile.openRead(),
+    );
+  }
+
+  Future<Uint8List?> _previewCandidateBytesFor(XFile xFile) async {
+    final mimeType =
+        lookupMimeType(xFile.path) ??
+        lookupMimeType(xFile.name) ??
+        xFile.mimeType;
+    if (mimeType == null || !mimeType.startsWith('image/')) {
+      return null;
+    }
+    try {
+      return await xFile.readAsBytes();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _fileNameFor(XFile xFile) {
+    final name = xFile.name;
+    if (name.isNotEmpty) {
+      return name;
+    }
+    return path.basename(xFile.path);
   }
 
   Future<PickedComposerAttachment?> _toPickedAttachment(
@@ -103,15 +141,15 @@ class AttachmentPickerService {
   }
 
   String _detectMimeType(PlatformFile file, ComposerAttachmentSource source) {
-    final detected = lookupMimeType(file.name, headerBytes: file.bytes);
+    final detected =
+        lookupMimeType(file.path ?? file.name, headerBytes: file.bytes) ??
+        lookupMimeType(file.name, headerBytes: file.bytes);
     if (detected != null && detected.isNotEmpty) {
       return detected;
     }
     return switch (source) {
-      ComposerAttachmentSource.photos => 'image/*',
-      ComposerAttachmentSource.gifs => 'image/gif',
-      ComposerAttachmentSource.videos => 'video/*',
-      ComposerAttachmentSource.files => 'application/octet-stream',
+      ComposerAttachmentSource.cameraPhoto => 'image/*',
+      ComposerAttachmentSource.mediaLibrary => 'application/octet-stream',
     };
   }
 
@@ -130,10 +168,8 @@ class AttachmentPickerService {
       return ComposerAttachmentKind.video;
     }
     return switch (source) {
-      ComposerAttachmentSource.photos => ComposerAttachmentKind.image,
-      ComposerAttachmentSource.gifs => ComposerAttachmentKind.gif,
-      ComposerAttachmentSource.videos => ComposerAttachmentKind.video,
-      ComposerAttachmentSource.files => ComposerAttachmentKind.file,
+      ComposerAttachmentSource.cameraPhoto => ComposerAttachmentKind.image,
+      ComposerAttachmentSource.mediaLibrary => ComposerAttachmentKind.image,
     };
   }
 
@@ -144,7 +180,6 @@ class AttachmentPickerService {
     return switch (kind) {
       ComposerAttachmentKind.image || ComposerAttachmentKind.gif => file.bytes,
       ComposerAttachmentKind.video => _videoPreviewBytesFor(file),
-      ComposerAttachmentKind.file => null,
     };
   }
 
@@ -157,7 +192,6 @@ class AttachmentPickerService {
       ComposerAttachmentKind.image ||
       ComposerAttachmentKind.gif => _imageDimensionsFor(previewBytes),
       ComposerAttachmentKind.video => _videoDimensionsFor(file),
-      ComposerAttachmentKind.file => (null, null),
     };
   }
 

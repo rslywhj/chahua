@@ -394,7 +394,6 @@ class _AttachmentPreviewThumb extends StatelessWidget {
     final background = CupertinoColors.systemGrey4.resolveFrom(context);
     final icon = switch (attachment.kind) {
       ComposerAttachmentKind.video => CupertinoIcons.play_rectangle_fill,
-      ComposerAttachmentKind.file => CupertinoIcons.doc_fill,
       _ => CupertinoIcons.photo_fill,
     };
 
