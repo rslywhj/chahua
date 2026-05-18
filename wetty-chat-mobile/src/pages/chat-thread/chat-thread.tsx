@@ -66,6 +66,9 @@ import {
   insertBeforeAnchor,
   refreshLatest,
   resetChat,
+  setTimelineMode,
+} from '@/store/messages/slice';
+import {
   selectChatGeneration,
   selectActiveTimelineMessages,
   selectCanLoadNewer,
@@ -73,8 +76,7 @@ import {
   selectNewerAnchor,
   selectOlderAnchor,
   selectPendingLiveCount,
-  setTimelineMode,
-} from '@/store/messagesSlice';
+} from '@/store/messages/selectors';
 import { messageAdded, messageConfirmed, messagePatched, reactionsUpdated } from '@/store/messageEvents';
 import type { RootState } from '@/store/index';
 import store from '@/store/index';

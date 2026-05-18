@@ -1,6 +1,6 @@
 import { combineReducers, configureStore, createListenerMiddleware } from '@reduxjs/toolkit';
 import connectionReducer from './connectionSlice';
-import messagesReducer from './messagesSlice';
+import messagesReducer from './messages/slice';
 import settingsReducer, { type SettingsState } from './settingsSlice';
 import stickerPreferencesReducer, {
   hydrateStickerPreferencesFromKv,
@@ -28,7 +28,7 @@ import userReducer, { fetchCurrentUser } from './userSlice';
 import { toMessagePreview, type MessageResponse } from '@/api/messages';
 import { messageAdded, messageConfirmed, messagePatched, messagesBulkDeleted } from './messageEvents';
 import { findLatestEligibleRootMessage, isOptimisticMessageId } from './messageProjection';
-import { selectHasLoadedTimeline } from './messagesSlice';
+import { selectHasLoadedTimeline } from './messages/selectors';
 import { kvSet } from '@/utils/db';
 import { isAnyOf } from '@reduxjs/toolkit';
 
@@ -60,8 +60,8 @@ listenerMiddleware.startListening({
       const isSubscribed = state.threads.items.some((t) => t.threadRootMessage.id === threadRootId);
       if (isSubscribed) {
         if (!message.isDeleted) {
-          // Only update the cached preview if the thread window isn't loaded
-          // (when loaded, the UI derives the preview from messagesSlice directly)
+          // Only update the cached preview if the thread timeline isn't loaded
+          // (when loaded, the UI derives the preview from the message timeline store)
           const storeKey = `${message.chatId}_thread_${threadRootId}`;
           const hasTimeline = selectHasLoadedTimeline(state, storeKey);
           if (!hasTimeline) {

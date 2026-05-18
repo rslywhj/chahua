@@ -61,7 +61,7 @@ import { type ChatListTab, ChatListSegment } from '@/components/chat/lists/ChatL
 import { ThreadListRow } from '@/components/chat/lists/ThreadListRow';
 import type { RootState } from '@/store';
 import { compareMessageOrder, isOptimisticMessageId } from '@/store/messageProjection';
-import type { ChatTimelineState } from '@/store/messagesSlice';
+import type { ChatTimelineState } from '@/store/messages/types';
 import type { StoredThreadListItem } from '@/api/threads';
 import styles from './ChatList.module.scss';
 

@@ -23,7 +23,7 @@ import {
   messagesBulkDeleted,
   reactionsUpdated,
 } from '@/store/messageEvents';
-import { selectAllTimelineMessages } from '@/store/messagesSlice';
+import { selectAllTimelineMessages } from '@/store/messages/selectors';
 import { getStoredJwtToken } from '@/utils/jwtToken';
 import { formatNotificationBody, getNotificationPreviewLabels } from '@/utils/messagePreview';
 import { buildNotificationNavigationData } from '@/utils/notificationNavigation';
