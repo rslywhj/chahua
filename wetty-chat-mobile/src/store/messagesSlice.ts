@@ -3,195 +3,217 @@ import type { MessageResponse } from '@/api/messages';
 import { messageAdded, messageConfirmed, messagePatched, messagesBulkDeleted, reactionsUpdated } from './messageEvents';
 import { compareMessageOrder } from './messageProjection';
 
-const MAX_WINDOWS = 5;
-
-export interface MessageWindow {
+export interface MessageSegment {
   messages: MessageResponse[];
-  nextCursor: string | null; // cursor to load older messages (top)
-  prevCursor: string | null; // cursor to load newer messages (bottom)
+  nextCursor: string | null;
+  prevCursor: string | null;
 }
 
-export interface ChatMessageState {
-  windows: MessageWindow[];
-  activeWindowIndex: number;
+export interface ChatTimelineState {
+  segments: MessageSegment[];
+  optimisticMessages: MessageResponse[];
+  hasReachedOldest: boolean;
+  hasReachedLatest: boolean;
   generation: number;
 }
 
-export interface MessagesState {
-  chats: Record<string, ChatMessageState>;
+export type TimelineMode = { type: 'latest' } | { type: 'around'; targetMessageId: string };
+
+export interface TimelineViewState {
+  mode: TimelineMode;
+  pendingLiveMessageIds: string[];
 }
+
+export interface MessagesState {
+  chats: Record<string, ChatTimelineState>;
+  views: Record<string, TimelineViewState>;
+}
+
+const EMPTY_ARRAY: MessageResponse[] = [];
+const DEFAULT_MODE: TimelineMode = { type: 'latest' };
 
 const initialState: MessagesState = {
   chats: {},
+  views: {},
 };
 
-function dedup(existing: MessageResponse[], incoming: MessageResponse[]): MessageResponse[] {
-  return incoming.filter(
-    (incomingMessage) => !existing.some((current) => isSameLogicalMessage(current, incomingMessage)),
-  );
-}
-
-function isOptimisticMessage(message: MessageResponse): boolean {
+function isOptimisticMessage(message: Pick<MessageResponse, 'id'>): boolean {
   return message.id.startsWith('cg_');
 }
 
 function isSameLogicalMessage(
-  left: MessageResponse,
+  left: Pick<MessageResponse, 'id' | 'clientGeneratedId'>,
   right: Pick<MessageResponse, 'id' | 'clientGeneratedId'>,
   fallbackClientGeneratedId?: string,
 ): boolean {
   if (left.id === right.id) return true;
-
   const rightClientGeneratedId = right.clientGeneratedId || fallbackClientGeneratedId;
   return !!left.clientGeneratedId && !!rightClientGeneratedId && left.clientGeneratedId === rightClientGeneratedId;
 }
 
-function insertMessageSorted(messages: MessageResponse[], message: MessageResponse): MessageResponse[] {
-  const next = [...messages];
-  const insertAt = next.findIndex((current) => compareMessageOrder(message, current) < 0);
-  if (insertAt === -1) {
-    next.push(message);
-  } else {
-    next.splice(insertAt, 0, message);
+function sortMessages(messages: MessageResponse[]): MessageResponse[] {
+  return [...messages].sort(compareMessageOrder);
+}
+
+function dedupeMessages(messages: MessageResponse[]): MessageResponse[] {
+  const result: MessageResponse[] = [];
+  for (const message of sortMessages(messages)) {
+    const existingIndex = result.findIndex((current) => isSameLogicalMessage(current, message));
+    if (existingIndex === -1) {
+      result.push(message);
+      continue;
+    }
+    if (!isOptimisticMessage(message)) {
+      result[existingIndex] = message;
+    }
   }
-  return next;
+  return result;
 }
 
-function hasLogicalMessage(
-  chat: ChatMessageState,
-  message: Pick<MessageResponse, 'id' | 'clientGeneratedId'>,
-): boolean {
-  return chat.windows.some((window) => window.messages.some((current) => isSameLogicalMessage(current, message)));
+function insertMessageSorted(messages: MessageResponse[], message: MessageResponse): MessageResponse[] {
+  return dedupeMessages([...messages, message]);
 }
 
-function getChat(state: MessagesState, chatId: string): ChatMessageState {
+function firstMessage(segment: MessageSegment): MessageResponse | undefined {
+  return segment.messages[0];
+}
+
+function lastMessage(segment: MessageSegment): MessageResponse | undefined {
+  return segment.messages[segment.messages.length - 1];
+}
+
+function segmentOverlaps(left: MessageSegment, right: MessageSegment): boolean {
+  const leftFirst = firstMessage(left);
+  const leftLast = lastMessage(left);
+  const rightFirst = firstMessage(right);
+  const rightLast = lastMessage(right);
+  if (!leftFirst || !leftLast || !rightFirst || !rightLast) return false;
+  return compareMessageOrder(leftFirst, rightLast) <= 0 && compareMessageOrder(rightFirst, leftLast) <= 0;
+}
+
+function normalizeSegments(segments: MessageSegment[]): MessageSegment[] {
+  const nonEmpty = segments
+    .filter((segment) => segment.messages.length > 0)
+    .map((segment) => ({ ...segment, messages: dedupeMessages(segment.messages) }))
+    .sort((left, right) => compareMessageOrder(firstMessage(left), firstMessage(right)));
+
+  const result: MessageSegment[] = [];
+  for (const segment of nonEmpty) {
+    const previous = result[result.length - 1];
+    if (!previous || !segmentOverlaps(previous, segment)) {
+      result.push(segment);
+      continue;
+    }
+    previous.messages = dedupeMessages([...previous.messages, ...segment.messages]);
+    previous.nextCursor = previous.nextCursor ?? segment.nextCursor;
+    previous.prevCursor = segment.prevCursor ?? previous.prevCursor;
+  }
+  return result;
+}
+
+function makeSegment(
+  messages: MessageResponse[],
+  nextCursor: string | null,
+  prevCursor: string | null,
+): MessageSegment | null {
+  const serverMessages = dedupeMessages(messages.filter((message) => !isOptimisticMessage(message)));
+  if (serverMessages.length === 0) return null;
+  return { messages: serverMessages, nextCursor, prevCursor };
+}
+
+function getChat(state: MessagesState, chatId: string): ChatTimelineState {
   if (!state.chats[chatId]) {
-    state.chats[chatId] = { windows: [], activeWindowIndex: 0, generation: 0 };
+    state.chats[chatId] = {
+      segments: [],
+      optimisticMessages: [],
+      hasReachedOldest: false,
+      hasReachedLatest: false,
+      generation: 0,
+    };
   }
   return state.chats[chatId];
 }
 
-function getActiveWindow(chat: ChatMessageState): MessageWindow | undefined {
-  return chat.windows[chat.activeWindowIndex];
+function getView(state: MessagesState, chatId: string): TimelineViewState {
+  if (!state.views[chatId]) {
+    state.views[chatId] = { mode: DEFAULT_MODE, pendingLiveMessageIds: [] };
+  }
+  return state.views[chatId];
 }
 
-function addMessageToWindow(state: MessagesState, chatId: string, message: MessageResponse): void {
-  const chat = getChat(state, chatId);
-  if (chat.windows.length === 0) {
-    chat.windows.push({ messages: [], nextCursor: null, prevCursor: null });
-    chat.activeWindowIndex = 0;
+function latestSegment(chat: ChatTimelineState): MessageSegment | undefined {
+  return chat.segments[chat.segments.length - 1];
+}
+
+function findSegmentContaining(chat: ChatTimelineState, messageId: string): MessageSegment | undefined {
+  return chat.segments.find((segment) => segment.messages.some((message) => message.id === messageId));
+}
+
+function takeSegmentContaining(chat: ChatTimelineState, messageId: string): MessageSegment | undefined {
+  const index = chat.segments.findIndex((segment) => segment.messages.some((message) => message.id === messageId));
+  if (index === -1) return undefined;
+  const [segment] = chat.segments.splice(index, 1);
+  return segment;
+}
+
+function activeSegment(
+  chat: ChatTimelineState | undefined,
+  view: TimelineViewState | undefined,
+): MessageSegment | undefined {
+  if (!chat) return undefined;
+  const mode = view?.mode ?? DEFAULT_MODE;
+  if (mode.type === 'around') {
+    return findSegmentContaining(chat, mode.targetMessageId) ?? latestSegment(chat);
   }
-  if (hasLogicalMessage(chat, message)) {
-    console.debug('[msg-trace] addMessageToWindow:dedup', {
-      chatId,
-      msgId: message.id,
-      cgId: message.clientGeneratedId ?? null,
-    });
+  return latestSegment(chat);
+}
+
+function removeLogicalMessage(
+  chat: ChatTimelineState,
+  message: Pick<MessageResponse, 'id' | 'clientGeneratedId'>,
+): void {
+  chat.optimisticMessages = chat.optimisticMessages.filter((current) => !isSameLogicalMessage(current, message));
+  chat.segments = chat.segments
+    .map((segment) => ({
+      ...segment,
+      messages: segment.messages.filter((current) => !isSameLogicalMessage(current, message)),
+    }))
+    .filter((segment) => segment.messages.length > 0);
+}
+
+function insertServerMessage(chat: ChatTimelineState, message: MessageResponse): void {
+  if (isOptimisticMessage(message)) {
+    upsertOptimisticMessage(chat, message);
     return;
   }
-  const lastWinIdx = chat.windows.length - 1;
-  const lastWin = chat.windows[lastWinIdx];
-  lastWin.messages = insertMessageSorted(lastWin.messages, message);
-  console.debug('[msg-trace] addMessageToWindow', {
-    chatId,
-    msgId: message.id,
-    cgId: message.clientGeneratedId ?? null,
-    targetWin: lastWinIdx,
-    activeWin: chat.activeWindowIndex,
-    mismatch: lastWinIdx !== chat.activeWindowIndex,
-    winCount: chat.windows.length,
-    winMsgCounts: chat.windows.map((w) => w.messages.length),
-  });
+  removeLogicalMessage(chat, message);
+  const latest = latestSegment(chat);
+  if (!latest) {
+    chat.segments = [{ messages: [message], nextCursor: null, prevCursor: null }];
+    return;
+  }
+  latest.messages = insertMessageSorted(latest.messages, message);
+  chat.segments = normalizeSegments(chat.segments);
 }
 
-function confirmPendingInWindows(
-  state: MessagesState,
-  chatId: string,
-  clientGeneratedId: string,
-  message: MessageResponse,
-): void {
-  const chat = getChat(state, chatId);
-  if (chat.windows.length === 0) {
-    chat.windows.push({ messages: [], nextCursor: null, prevCursor: null });
-    chat.activeWindowIndex = 0;
-  }
-
-  const resolvedMessage = {
-    ...message,
-    clientGeneratedId: message.clientGeneratedId || clientGeneratedId,
-  };
-
-  let targetWindowIndex = chat.windows.length - 1;
-  for (let i = 0; i < chat.windows.length; i++) {
-    if (chat.windows[i].messages.some((current) => isSameLogicalMessage(current, resolvedMessage, clientGeneratedId))) {
-      targetWindowIndex = i;
-      break;
-    }
-  }
-
-  const removedCounts = chat.windows.map((win) => {
-    const before = win.messages.length;
-    win.messages = win.messages.filter((current) => !isSameLogicalMessage(current, resolvedMessage, clientGeneratedId));
-    return before - win.messages.length;
-  });
-
-  chat.windows[targetWindowIndex].messages = insertMessageSorted(
-    chat.windows[targetWindowIndex].messages,
-    resolvedMessage,
-  );
-
-  console.debug('[msg-trace] confirmPendingInWindows', {
-    chatId,
-    cgId: clientGeneratedId,
-    confirmedId: message.id,
-    targetWin: targetWindowIndex,
-    activeWin: chat.activeWindowIndex,
-    mismatch: targetWindowIndex !== chat.activeWindowIndex,
-    removedPerWin: removedCounts,
-  });
+function upsertOptimisticMessage(chat: ChatTimelineState, message: MessageResponse): void {
+  const next = chat.optimisticMessages.filter((current) => !isSameLogicalMessage(current, message));
+  next.push(message);
+  chat.optimisticMessages = next;
 }
 
-function patchMessageInWindows(
-  state: MessagesState,
-  baseChatId: string,
-  messageId: string,
-  message: MessageResponse,
-): void {
-  for (const [chatId, chat] of Object.entries(state.chats)) {
-    if (chatId !== baseChatId && !chatId.startsWith(`${baseChatId}_thread_`)) continue;
+function mergeSegment(chat: ChatTimelineState, segment: MessageSegment): void {
+  chat.segments = normalizeSegments([...chat.segments, segment]);
+}
 
-    for (const win of chat.windows) {
-      if (message.isDeleted) {
-        win.messages = win.messages.filter((m) => m.id !== messageId);
-      }
+function clearPendingLiveForLoadedMessages(view: TimelineViewState, chat: ChatTimelineState): void {
+  const loadedIds = new Set(chat.segments.flatMap((segment) => segment.messages.map((message) => message.id)));
+  view.pendingLiveMessageIds = view.pendingLiveMessageIds.filter((messageId) => !loadedIds.has(messageId));
+}
 
-      for (let i = 0; i < win.messages.length; i++) {
-        const current = win.messages[i];
-        if (!message.isDeleted && current.id === messageId) {
-          const preservedReplyTo =
-            message.replyToMessage ??
-            (message.replyToMessage === undefined && current.replyToMessage !== undefined
-              ? current.replyToMessage
-              : undefined);
-          win.messages[i] = {
-            ...current,
-            ...message,
-            replyToMessage: preservedReplyTo,
-            reactions: message.reactions ?? current.reactions,
-            threadInfo: message.threadInfo ?? current.threadInfo,
-          };
-        } else if (current.replyToMessage?.id === messageId) {
-          current.replyToMessage.message = message.message;
-          current.replyToMessage.messageType = message.messageType;
-          current.replyToMessage.sticker = message.sticker;
-          current.replyToMessage.isDeleted = message.isDeleted;
-          current.replyToMessage.attachments = message.attachments;
-          current.replyToMessage.firstAttachmentKind = message.attachments?.[0]?.kind;
-          current.replyToMessage.mentions = message.mentions;
-        }
-      }
-    }
-  }
+function allLoadedMessages(chat: ChatTimelineState | undefined): MessageResponse[] {
+  if (!chat) return EMPTY_ARRAY;
+  return chat.segments.flatMap((segment) => segment.messages);
 }
 
 const messagesSlice = createSlice({
@@ -206,133 +228,27 @@ const messagesSlice = createSlice({
     ) {
       const { chatId, messages, nextCursor, prevCursor } = action.payload;
       const prevGen = state.chats[chatId]?.generation ?? 0;
+      const segment = makeSegment(messages, nextCursor, prevCursor);
       state.chats[chatId] = {
-        windows: [{ messages, nextCursor, prevCursor }],
-        activeWindowIndex: 0,
+        segments: segment ? [segment] : [],
+        optimisticMessages: [],
+        hasReachedOldest: nextCursor === null,
+        hasReachedLatest: prevCursor === null,
         generation: prevGen + 1,
       };
+      state.views[chatId] = { mode: DEFAULT_MODE, pendingLiveMessageIds: [] };
     },
 
-    pushWindow(
-      state,
-      action: {
-        payload: { chatId: string; messages: MessageResponse[]; nextCursor: string | null; prevCursor: string | null };
-      },
-    ) {
-      const { chatId, messages, nextCursor, prevCursor } = action.payload;
-      const chat = getChat(state, chatId);
-      const newWin: MessageWindow = { messages, nextCursor, prevCursor };
-
-      // Insert in chronological order so the last window is always the most recent
-      const newTs = messages.length > 0 ? messages[0].createdAt : '';
-      let insertIdx = chat.windows.length;
-      for (let i = 0; i < chat.windows.length; i++) {
-        const winTs = chat.windows[i].messages[0]?.createdAt ?? '';
-        if (newTs < winTs) {
-          insertIdx = i;
-          break;
-        }
-      }
-      chat.windows.splice(insertIdx, 0, newWin);
-      chat.activeWindowIndex = insertIdx;
-      chat.generation++;
-
-      // Cap at MAX_WINDOWS: evict oldest non-active
-      while (chat.windows.length > MAX_WINDOWS) {
-        const evictIdx = chat.windows.findIndex((_, i) => i !== chat.activeWindowIndex);
-        if (evictIdx === -1) break;
-        chat.windows.splice(evictIdx, 1);
-        if (chat.activeWindowIndex > evictIdx) chat.activeWindowIndex--;
+    setTimelineMode(state, action: { payload: { chatId: string; mode: TimelineMode } }) {
+      const view = getView(state, action.payload.chatId);
+      view.mode = action.payload.mode;
+      if (action.payload.mode.type === 'latest') {
+        view.pendingLiveMessageIds = [];
       }
     },
 
-    prependMessages(
-      state,
-      action: { payload: { chatId: string; messages: MessageResponse[]; nextCursor?: string | null } },
-    ) {
-      const { chatId, messages } = action.payload;
-      const chat = getChat(state, chatId);
-      const win = getActiveWindow(chat);
-      if (!win) return;
-      const unique = dedup(win.messages, messages);
-      win.messages = [...unique, ...win.messages];
-      win.messages.sort(compareMessageOrder);
-      if (action.payload.nextCursor !== undefined) {
-        win.nextCursor = action.payload.nextCursor;
-      }
-    },
-
-    appendMessages(
-      state,
-      action: { payload: { chatId: string; messages: MessageResponse[]; prevCursor?: string | null } },
-    ) {
-      const { chatId, messages } = action.payload;
-      const chat = getChat(state, chatId);
-      const win = getActiveWindow(chat);
-      if (!win) return;
-      const unique = dedup(win.messages, messages);
-      win.messages = [...win.messages, ...unique];
-      if (action.payload.prevCursor !== undefined) {
-        win.prevCursor = action.payload.prevCursor;
-      }
-      // Merge with next window if gap closed
-      if (win.prevCursor === null && chat.activeWindowIndex < chat.windows.length - 1) {
-        const nextWin = chat.windows[chat.activeWindowIndex + 1];
-        const merged = dedup(win.messages, nextWin.messages);
-        win.messages = [...win.messages, ...merged];
-        win.messages.sort(compareMessageOrder);
-        win.prevCursor = nextWin.prevCursor;
-        chat.windows.splice(chat.activeWindowIndex + 1, 1);
-      }
-    },
-
-    // Backwards compat aliases
-    setMessagesForChat(state, action: { payload: { chatId: string; messages: MessageResponse[] } }) {
-      const { chatId, messages } = action.payload;
-      // Used for error recovery / removing messages - reset to single window preserving no cursors
-      const chat = state.chats[chatId];
-      if (chat && chat.windows.length > 0) {
-        const win = getActiveWindow(chat);
-        if (win) {
-          win.messages = messages;
-          return;
-        }
-      }
-      state.chats[chatId] = {
-        windows: [{ messages, nextCursor: null, prevCursor: null }],
-        activeWindowIndex: 0,
-        generation: 0,
-      };
-    },
-
-    setNextCursorForChat(state, action: { payload: { chatId: string; cursor: string | null } }) {
-      const { chatId, cursor } = action.payload;
-      const chat = getChat(state, chatId);
-      const win = getActiveWindow(chat);
-      if (win) win.nextCursor = cursor;
-    },
-
-    setPrevCursorForChat(state, action: { payload: { chatId: string; cursor: string | null } }) {
-      const { chatId, cursor } = action.payload;
-      const chat = getChat(state, chatId);
-      const win = getActiveWindow(chat);
-      if (win) win.prevCursor = cursor;
-    },
-
-    activateLatestWindow(state, action: { payload: { chatId: string } }) {
-      const chat = state.chats[action.payload.chatId];
-      if (chat && chat.windows.length > 0 && chat.activeWindowIndex !== chat.windows.length - 1) {
-        const from = chat.activeWindowIndex;
-        chat.activeWindowIndex = chat.windows.length - 1;
-        chat.generation++;
-        console.debug('[msg-trace] activateLatestWindow', {
-          chatId: action.payload.chatId,
-          from,
-          to: chat.activeWindowIndex,
-          winCount: chat.windows.length,
-          winMsgCounts: chat.windows.map((w) => w.messages.length),
-        });
-      }
+    clearPendingLiveMessages(state, action: { payload: { chatId: string } }) {
+      getView(state, action.payload.chatId).pendingLiveMessageIds = [];
     },
 
     refreshLatest(
@@ -342,127 +258,263 @@ const messagesSlice = createSlice({
       },
     ) {
       const { chatId, messages, nextCursor, prevCursor } = action.payload;
-      const chat = state.chats[chatId];
+      const chat = getChat(state, chatId);
+      const segment = makeSegment(messages, nextCursor, prevCursor);
+      const fetchedClientIds = new Set(messages.map((message) => message.clientGeneratedId).filter(Boolean));
+      chat.optimisticMessages = chat.optimisticMessages.filter(
+        (message) => !message.clientGeneratedId || !fetchedClientIds.has(message.clientGeneratedId),
+      );
+      if (segment) {
+        mergeSegment(chat, segment);
+      }
+      chat.hasReachedLatest = true;
+      chat.hasReachedOldest = nextCursor === null || chat.hasReachedOldest;
+      chat.generation++;
+      const view = getView(state, chatId);
+      view.mode = DEFAULT_MODE;
+      clearPendingLiveForLoadedMessages(view, chat);
+    },
 
-      if (!chat || chat.windows.length === 0) {
-        // No existing data — full reset
-        const prevGen = chat?.generation ?? 0;
-        state.chats[chatId] = {
-          windows: [{ messages, nextCursor, prevCursor }],
-          activeWindowIndex: 0,
-          generation: prevGen + 1,
+    insertAround(
+      state,
+      action: {
+        payload: {
+          chatId: string;
+          targetMessageId: string;
+          messages: MessageResponse[];
+          nextCursor: string | null;
+          prevCursor: string | null;
         };
+      },
+    ) {
+      const { chatId, targetMessageId, messages, nextCursor, prevCursor } = action.payload;
+      if (!messages.some((message) => message.id === targetMessageId)) return;
+      const segment = makeSegment(messages, nextCursor, prevCursor);
+      if (!segment) return;
+      const chat = getChat(state, chatId);
+      mergeSegment(chat, segment);
+      chat.hasReachedOldest = nextCursor === null || chat.hasReachedOldest;
+      chat.hasReachedLatest = prevCursor === null || chat.hasReachedLatest;
+      chat.generation++;
+      getView(state, chatId).mode = { type: 'around', targetMessageId };
+    },
+
+    insertBeforeAnchor(
+      state,
+      action: {
+        payload: { chatId: string; anchorMessageId: string; messages: MessageResponse[]; nextCursor: string | null };
+      },
+    ) {
+      const { chatId, anchorMessageId, messages, nextCursor } = action.payload;
+      const segment = makeSegment(
+        messages.filter((message) => compareMessageOrder(message, { id: anchorMessageId }) < 0),
+        nextCursor,
+        anchorMessageId,
+      );
+      const chat = getChat(state, chatId);
+      if (segment) {
+        const anchorSegment = takeSegmentContaining(chat, anchorMessageId);
+        mergeSegment(
+          chat,
+          anchorSegment
+            ? {
+                messages: [...segment.messages, ...anchorSegment.messages],
+                nextCursor: segment.nextCursor,
+                prevCursor: anchorSegment.prevCursor,
+              }
+            : segment,
+        );
+      }
+      chat.hasReachedOldest = nextCursor === null || chat.hasReachedOldest;
+      chat.generation++;
+    },
+
+    insertAfterAnchor(
+      state,
+      action: {
+        payload: { chatId: string; anchorMessageId: string; messages: MessageResponse[]; prevCursor: string | null };
+      },
+    ) {
+      const { chatId, anchorMessageId, messages, prevCursor } = action.payload;
+      const segment = makeSegment(
+        messages.filter((message) => compareMessageOrder(message, { id: anchorMessageId }) > 0),
+        anchorMessageId,
+        prevCursor,
+      );
+      const chat = getChat(state, chatId);
+      if (segment) {
+        const anchorSegment = takeSegmentContaining(chat, anchorMessageId);
+        mergeSegment(
+          chat,
+          anchorSegment
+            ? {
+                messages: [...anchorSegment.messages, ...segment.messages],
+                nextCursor: anchorSegment.nextCursor,
+                prevCursor: segment.prevCursor,
+              }
+            : segment,
+        );
+      }
+      chat.hasReachedLatest = prevCursor === null || chat.hasReachedLatest;
+      chat.generation++;
+    },
+
+    applyRealtimeMessage(state, action: { payload: { chatId: string; message: MessageResponse } }) {
+      const { chatId, message } = action.payload;
+      const chat = getChat(state, chatId);
+      const view = getView(state, chatId);
+      const matchingOptimistic = chat.optimisticMessages.some((current) => isSameLogicalMessage(current, message));
+      if (matchingOptimistic) {
+        removeLogicalMessage(chat, message);
+        insertServerMessage(chat, message);
+        chat.hasReachedLatest = true;
+        chat.generation++;
         return;
       }
 
-      // Check the last window (most recent chronologically) for overlap
-      const lastWinIdx = chat.windows.length - 1;
-      const lastWin = chat.windows[lastWinIdx];
-      const fetchedIds = new Set(messages.map((m) => m.id));
-      const fetchedClientGeneratedIds = new Set(messages.map((m) => m.clientGeneratedId).filter(Boolean));
-      const hasOverlap = lastWin.messages.some((m) => fetchedIds.has(m.id));
-      const pendingOptimistic = lastWin.messages.filter((message) => isOptimisticMessage(message));
-
-      if (hasOverlap || pendingOptimistic.length > 0) {
-        // Preserve still-pending optimistic rows during latest-window refreshes so
-        // API confirm / websocket echo can reconcile them later.
-        const unmatchedExisting = lastWin.messages.filter((current) => {
-          if (isOptimisticMessage(current)) return false;
-          if (fetchedIds.has(current.id)) return false;
-          return !current.clientGeneratedId || !fetchedClientGeneratedIds.has(current.clientGeneratedId);
-        });
-
-        let nextMessages = [...unmatchedExisting, ...messages];
-        for (const optimistic of pendingOptimistic) {
-          if (nextMessages.some((current) => isSameLogicalMessage(current, optimistic))) continue;
-          nextMessages = insertMessageSorted(nextMessages, optimistic);
-        }
-
-        lastWin.messages = nextMessages;
-        if (!hasOverlap) {
-          lastWin.nextCursor = nextCursor;
-        }
-        // Preserve nextCursor from existing window (allows loading older),
-        // use prevCursor from API response
-        lastWin.prevCursor = prevCursor;
-        chat.activeWindowIndex = lastWinIdx;
-        console.debug('[msg-trace] refreshLatest:merge', {
-          chatId,
-          hasOverlap,
-          optimisticCount: pendingOptimistic.length,
-          optimisticIds: pendingOptimistic.map((m) => m.id),
-          unmatchedCount: unmatchedExisting.length,
-          fetchedCount: messages.length,
-          finalCount: nextMessages.length,
-          activeWin: lastWinIdx,
-        });
-      } else {
-        // No overlap — stale data, full reset
-        console.debug('[msg-trace] refreshLatest:reset', {
-          chatId,
-          existingMsgCount: lastWin.messages.length,
-          existingIds: lastWin.messages.slice(-3).map((m) => m.id),
-          fetchedCount: messages.length,
-          fetchedIds: messages.slice(-3).map((m) => m.id),
-        });
-        chat.windows = [{ messages, nextCursor, prevCursor }];
-        chat.activeWindowIndex = 0;
+      const exists = allLoadedMessages(chat).some((current) => isSameLogicalMessage(current, message));
+      if (exists) {
+        insertServerMessage(chat, message);
+        chat.generation++;
+        return;
       }
+
+      if (chat.hasReachedLatest && view.mode.type === 'latest') {
+        insertServerMessage(chat, message);
+        chat.generation++;
+        return;
+      }
+
+      if (!view.pendingLiveMessageIds.includes(message.id)) {
+        view.pendingLiveMessageIds.push(message.id);
+      }
+    },
+
+    confirmOptimistic(
+      state,
+      action: { payload: { chatId: string; clientGeneratedId: string; message: MessageResponse } },
+    ) {
+      const { chatId, clientGeneratedId, message } = action.payload;
+      const chat = getChat(state, chatId);
+      const resolvedMessage = { ...message, clientGeneratedId: message.clientGeneratedId || clientGeneratedId };
+      removeLogicalMessage(chat, resolvedMessage);
+      insertServerMessage(chat, resolvedMessage);
+      chat.hasReachedLatest = true;
+      chat.generation++;
+    },
+
+    markOptimisticFailed(state, action: { payload: { chatId: string; clientGeneratedId: string } }) {
+      const chat = getChat(state, action.payload.chatId);
+      const failed = chat.optimisticMessages.find(
+        (message) =>
+          message.clientGeneratedId === action.payload.clientGeneratedId ||
+          message.id === action.payload.clientGeneratedId,
+      );
+      if (!failed) return;
+      failed.isDeleted = true;
       chat.generation++;
     },
   },
   extraReducers: (builder) => {
     builder
       .addCase(messageAdded, (state, action) => {
-        addMessageToWindow(state, action.payload.storeChatId, action.payload.message);
+        const { storeChatId, message, origin } = action.payload;
+        const chat = getChat(state, storeChatId);
+        if (origin === 'optimistic' || isOptimisticMessage(message)) {
+          upsertOptimisticMessage(chat, message);
+          getView(state, storeChatId).mode = DEFAULT_MODE;
+          chat.hasReachedLatest = true;
+          chat.generation++;
+          return;
+        }
+        if (origin !== 'ws') {
+          insertServerMessage(chat, message);
+          chat.hasReachedLatest = true;
+          chat.generation++;
+          return;
+        }
+        messagesSlice.caseReducers.applyRealtimeMessage(state, {
+          payload: { chatId: storeChatId, message },
+        });
       })
       .addCase(messageConfirmed, (state, action) => {
-        confirmPendingInWindows(
-          state,
-          action.payload.storeChatId,
-          action.payload.clientGeneratedId,
-          action.payload.message,
-        );
+        messagesSlice.caseReducers.confirmOptimistic(state, {
+          payload: {
+            chatId: action.payload.storeChatId,
+            clientGeneratedId: action.payload.clientGeneratedId,
+            message: action.payload.message,
+          },
+        });
       })
       .addCase(messagePatched, (state, action) => {
-        patchMessageInWindows(state, action.payload.chatId, action.payload.messageId, action.payload.message);
+        const { chatId: baseChatId, messageId, message } = action.payload;
+        for (const [storeKey, chat] of Object.entries(state.chats)) {
+          if (storeKey !== baseChatId && !storeKey.startsWith(`${baseChatId}_thread_`)) continue;
+          if (message.isDeleted) {
+            chat.optimisticMessages = chat.optimisticMessages.filter((m) => m.id !== messageId);
+          }
+          for (const segment of chat.segments) {
+            if (message.isDeleted) {
+              segment.messages = segment.messages.filter((m) => m.id !== messageId);
+            }
+            for (let i = 0; i < segment.messages.length; i++) {
+              const current = segment.messages[i];
+              if (!message.isDeleted && current.id === messageId) {
+                segment.messages[i] = {
+                  ...current,
+                  ...message,
+                  replyToMessage: message.replyToMessage ?? current.replyToMessage,
+                  reactions: message.reactions ?? current.reactions,
+                  threadInfo: message.threadInfo ?? current.threadInfo,
+                };
+              } else if (current.replyToMessage?.id === messageId) {
+                current.replyToMessage.message = message.message;
+                current.replyToMessage.messageType = message.messageType;
+                current.replyToMessage.sticker = message.sticker;
+                current.replyToMessage.isDeleted = message.isDeleted;
+                current.replyToMessage.attachments = message.attachments;
+                current.replyToMessage.firstAttachmentKind = message.attachments?.[0]?.kind;
+                current.replyToMessage.mentions = message.mentions;
+              }
+            }
+          }
+          chat.segments = chat.segments.filter((segment) => segment.messages.length > 0);
+          chat.generation++;
+        }
       })
       .addCase(messagesBulkDeleted, (state, action) => {
         const { chatId, messageIds } = action.payload;
         const idSet = new Set(messageIds);
-
         for (const [storeKey, chat] of Object.entries(state.chats)) {
           if (storeKey !== chatId && !storeKey.startsWith(`${chatId}_thread_`)) continue;
-
-          for (const win of chat.windows) {
-            win.messages = win.messages.filter((m) => !idSet.has(m.id));
-
-            // Mark replyToMessage references as deleted
-            for (const msg of win.messages) {
-              if (msg.replyToMessage && idSet.has(msg.replyToMessage.id)) {
-                msg.replyToMessage.isDeleted = true;
-                msg.replyToMessage.message = null;
-                msg.replyToMessage.attachments = [];
+          chat.optimisticMessages = chat.optimisticMessages.filter((message) => !idSet.has(message.id));
+          for (const segment of chat.segments) {
+            segment.messages = segment.messages.filter((message) => !idSet.has(message.id));
+            for (const message of segment.messages) {
+              if (message.replyToMessage && idSet.has(message.replyToMessage.id)) {
+                message.replyToMessage.isDeleted = true;
+                message.replyToMessage.message = null;
+                message.replyToMessage.attachments = [];
               }
             }
           }
-
-          chat.generation += 1;
+          chat.segments = chat.segments.filter((segment) => segment.messages.length > 0);
+          chat.generation++;
         }
       })
       .addCase(reactionsUpdated, (state, action) => {
         const { chatId, messageId, reactions } = action.payload;
         for (const [storeKey, chat] of Object.entries(state.chats)) {
           if (storeKey !== chatId && !storeKey.startsWith(`${chatId}_thread_`)) continue;
-          for (const win of chat.windows) {
-            for (let i = 0; i < win.messages.length; i++) {
-              if (win.messages[i].id === messageId) {
-                const existing = win.messages[i].reactions ?? [];
-                const merged = reactions.map((r) => {
-                  const prev = existing.find((e) => e.emoji === r.emoji);
-                  return { ...r, reactedByMe: r.reactedByMe ?? prev?.reactedByMe };
+          for (const segment of chat.segments) {
+            for (let i = 0; i < segment.messages.length; i++) {
+              if (segment.messages[i].id === messageId) {
+                const existing = segment.messages[i].reactions ?? [];
+                const merged = reactions.map((reaction) => {
+                  const prev = existing.find((item) => item.emoji === reaction.emoji);
+                  return { ...reaction, reactedByMe: reaction.reactedByMe ?? prev?.reactedByMe };
                 });
-                win.messages[i] = { ...win.messages[i], reactions: merged };
+                segment.messages[i] = { ...segment.messages[i], reactions: merged };
               }
             }
           }
@@ -473,69 +525,101 @@ const messagesSlice = createSlice({
 
 export const {
   resetChat,
-  pushWindow,
-  setMessagesForChat,
-  setNextCursorForChat,
-  setPrevCursorForChat,
-  activateLatestWindow,
-  appendMessages,
-  prependMessages,
+  setTimelineMode,
+  clearPendingLiveMessages,
   refreshLatest,
+  insertAround,
+  insertBeforeAnchor,
+  insertAfterAnchor,
+  applyRealtimeMessage,
+  confirmOptimistic,
+  markOptimisticFailed,
 } = messagesSlice.actions;
 
-/** Selectors */
-const EMPTY_ARRAY: MessageResponse[] = [];
-
 const selectMessagesChats = (state: { messages: MessagesState }) => state.messages.chats;
+const selectMessagesViews = (state: { messages: MessagesState }) => state.messages.views;
 
-export const selectMessagesForChat = createSelector(
-  [selectMessagesChats, (_state: { messages: MessagesState }, chatId: string) => chatId],
-  (chats, chatId): MessageResponse[] => {
+export const selectTimelineMode = createSelector(
+  [selectMessagesViews, (_state: { messages: MessagesState }, chatId: string) => chatId],
+  (views, chatId): TimelineMode => views[chatId]?.mode ?? DEFAULT_MODE,
+);
+
+export const selectActiveTimelineMessages = createSelector(
+  [selectMessagesChats, selectMessagesViews, (_state: { messages: MessagesState }, chatId: string) => chatId],
+  (chats, views, chatId): MessageResponse[] => {
     const chat = chats[chatId];
-    if (!chat || chat.windows.length === 0) return EMPTY_ARRAY;
-    return chat.windows[chat.activeWindowIndex]?.messages ?? EMPTY_ARRAY;
+    const segment = activeSegment(chat, views[chatId]);
+    if (!chat || !segment) return chat?.optimisticMessages ?? EMPTY_ARRAY;
+    if ((views[chatId]?.mode ?? DEFAULT_MODE).type === 'latest') {
+      return [...segment.messages, ...chat.optimisticMessages];
+    }
+    return segment.messages;
   },
 );
 
-export function selectNextCursorForChat(state: { messages: MessagesState }, chatId: string): string | null {
+export function selectCanLoadOlder(state: { messages: MessagesState }, chatId: string): boolean {
   const chat = state.messages.chats[chatId];
-  if (!chat || chat.windows.length === 0) return null;
-  return chat.windows[chat.activeWindowIndex]?.nextCursor ?? null;
+  const segment = activeSegment(chat, state.messages.views[chatId]);
+  if (!chat || !segment) return false;
+  return segment.nextCursor !== null || segment !== chat.segments[0] || !chat.hasReachedOldest;
+}
+
+export function selectCanLoadNewer(state: { messages: MessagesState }, chatId: string): boolean {
+  const chat = state.messages.chats[chatId];
+  const segment = activeSegment(chat, state.messages.views[chatId]);
+  if (!chat || !segment) return false;
+  return segment.prevCursor !== null || segment !== latestSegment(chat) || !chat.hasReachedLatest;
+}
+
+export function selectOlderAnchor(state: { messages: MessagesState }, chatId: string): string | null {
+  const chat = state.messages.chats[chatId];
+  const segment = activeSegment(chat, state.messages.views[chatId]);
+  return segment?.nextCursor ?? segment?.messages[0]?.id ?? null;
+}
+
+export function selectNewerAnchor(state: { messages: MessagesState }, chatId: string): string | null {
+  const chat = state.messages.chats[chatId];
+  const segment = activeSegment(chat, state.messages.views[chatId]);
+  return segment?.prevCursor ?? segment?.messages[segment.messages.length - 1]?.id ?? null;
+}
+
+export function selectPendingLiveCount(state: { messages: MessagesState }, chatId: string): number {
+  return state.messages.views[chatId]?.pendingLiveMessageIds.length ?? 0;
 }
 
 export function selectChatGeneration(state: { messages: MessagesState }, chatId: string): number {
   return state.messages.chats[chatId]?.generation ?? 0;
 }
 
-export function selectPrevCursorForChat(state: { messages: MessagesState }, chatId: string): string | null {
+export function selectHasLoadedTimeline(state: { messages: MessagesState }, chatId: string): boolean {
   const chat = state.messages.chats[chatId];
-  if (!chat || chat.windows.length === 0) return null;
-  return chat.windows[chat.activeWindowIndex]?.prevCursor ?? null;
+  return !!chat && (chat.segments.length > 0 || chat.optimisticMessages.length > 0);
 }
 
-/**
- * Find the latest non-deleted message in a thread's windows.
- * Returns null if no window exists for this thread (caller should fall back to cached preview).
- */
+export function selectLatestServerMessage(state: { messages: MessagesState }, chatId: string): MessageResponse | null {
+  const chat = state.messages.chats[chatId];
+  const segment = latestSegment(chat);
+  return segment?.messages[segment.messages.length - 1] ?? null;
+}
+
+export function selectAllTimelineMessages(state: { messages: MessagesState }, chatId: string): MessageResponse[] {
+  const chat = state.messages.chats[chatId];
+  if (!chat) return EMPTY_ARRAY;
+  return [...allLoadedMessages(chat), ...chat.optimisticMessages];
+}
+
 export function selectLatestThreadReplyMessage(
   state: { messages: MessagesState },
   chatId: string,
   threadRootId: string,
 ): MessageResponse | null {
   const storeKey = `${chatId}_thread_${threadRootId}`;
-  const chat = state.messages.chats[storeKey];
-  if (!chat || chat.windows.length === 0) return null;
-
+  const messages = selectAllTimelineMessages(state, storeKey);
   let latest: MessageResponse | null = null;
-  for (const win of chat.windows) {
-    for (let i = win.messages.length - 1; i >= 0; i--) {
-      const msg = win.messages[i];
-      if (!msg.isDeleted) {
-        if (!latest || compareMessageOrder(msg, latest) > 0) {
-          latest = msg;
-        }
-        break; // sorted within window — first non-deleted from end is the latest in this window
-      }
+  for (const message of messages) {
+    if (message.isDeleted) continue;
+    if (!latest || compareMessageOrder(message, latest) > 0) {
+      latest = message;
     }
   }
   return latest;
