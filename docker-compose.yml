@@ -24,6 +24,7 @@ services:
       - 3000:3000
     environment:
       DATABASE_URL: postgresql://wetty_chat:NIM1gs7unjbQumYD@postgres:5432/wetty_chat
+      BACKEND_LOG_FORMAT: pretty
   rustfs:
     image: rustfs/rustfs:latest
     restart: unless-stopped

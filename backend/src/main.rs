@@ -17,7 +17,7 @@ use tower_http::trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tower_http::LatencyUnit;
 use tower_http::ServiceBuilderExt;
 use tracing::{debug_span, info, Level};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use utils::auth::{X_APP_VERSION, X_CLIENT_ID, X_USER_ID};
 use utoipa::OpenApi;
 
@@ -55,6 +55,13 @@ pub(crate) const MAX_CHAT_ATTACHMENTS_LIMIT: i64 = 100;
 pub(crate) const MAX_MESSAGES_LIMIT: i64 = 100;
 pub(crate) const MAX_MEMBERS_LIMIT: i64 = 100;
 const MAX_REQUEST_BODY_BYTES: usize = 50 * 1024 * 1024;
+const LOG_FORMAT_ENV: &str = "BACKEND_LOG_FORMAT";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LogFormat {
+    Pretty,
+    Json,
+}
 
 #[derive(Clone, Deserialize, Default)]
 pub(crate) enum AuthMethod {
@@ -88,17 +95,17 @@ pub(crate) struct AppState {
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     // Tracing: RUST_LOG controls level (e.g. RUST_LOG=info, or
     // RUST_LOG=wetty_chat_backend=debug,tower_http=debug for request-level logs).
+    // BACKEND_LOG_FORMAT controls stdout format: pretty for local development,
+    // json for production collection by agents such as Grafana Alloy.
     // Responses include X-Request-ID for correlation with clients or proxies.
-    tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer().with_target(true))
-        .init();
+    init_tracing();
 
     db_tracing::install();
 
-    dotenvy::dotenv().ok();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let manager = ConnectionManager::<PgConnection>::new(&database_url);
 
@@ -349,6 +356,29 @@ fn read_socket_addr(var_name: &str, default: SocketAddr) -> SocketAddr {
         .unwrap_or(default)
 }
 
+fn init_tracing() {
+    let env_filter = EnvFilter::from_default_env();
+    match parse_log_format(std::env::var(LOG_FORMAT_ENV).ok().as_deref()) {
+        LogFormat::Pretty => tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().pretty().with_target(true))
+            .init(),
+        LogFormat::Json => tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().json().with_target(true))
+            .init(),
+    }
+}
+
+fn parse_log_format(value: Option<&str>) -> LogFormat {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        None => LogFormat::Pretty,
+        Some(value) if value.eq_ignore_ascii_case("pretty") => LogFormat::Pretty,
+        Some(value) if value.eq_ignore_ascii_case("json") => LogFormat::Json,
+        Some(_) => panic!("{LOG_FORMAT_ENV} must be one of: pretty, json"),
+    }
+}
+
 fn read_cors_allowed_origins(var_name: &str) -> Option<Vec<HeaderValue>> {
     let raw_value = std::env::var(var_name).ok()?;
     let raw_value = raw_value.trim();
@@ -376,4 +406,28 @@ fn read_cors_allowed_origins(var_name: &str) -> Option<Vec<HeaderValue>> {
     );
 
     Some(origins)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_log_format, LogFormat};
+
+    #[test]
+    fn log_format_defaults_to_pretty_when_unset() {
+        assert_eq!(parse_log_format(None), LogFormat::Pretty);
+    }
+
+    #[test]
+    fn log_format_accepts_json_and_pretty_case_insensitively() {
+        assert_eq!(parse_log_format(Some("json")), LogFormat::Json);
+        assert_eq!(parse_log_format(Some("JSON")), LogFormat::Json);
+        assert_eq!(parse_log_format(Some("pretty")), LogFormat::Pretty);
+        assert_eq!(parse_log_format(Some("Pretty")), LogFormat::Pretty);
+    }
+
+    #[test]
+    #[should_panic(expected = "BACKEND_LOG_FORMAT must be one of: pretty, json")]
+    fn log_format_rejects_unknown_values() {
+        parse_log_format(Some("xml"));
+    }
 }
