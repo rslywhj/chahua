@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -182,6 +182,20 @@ pub struct MessageSearchCandidatePage {
     pub next_offset: Option<usize>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SearchCandidateDropCounts {
+    pub missing_db_row: usize,
+    pub wrong_chat: usize,
+    pub not_searchable: usize,
+    pub stale_version: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthoritativeSearchHits {
+    pub messages: Vec<Message>,
+    pub drops: SearchCandidateDropCounts,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageSearchSort {
@@ -290,8 +304,14 @@ impl MessageSearchService {
 
     pub fn delete_message_best_effort(self: &Arc<Self>, message_id: i64) {
         let service = self.clone();
+        let started_at = Instant::now();
         tokio::spawn(async move {
-            service.record_index_result("delete", service.delete_message(message_id).await);
+            service.record_index_result(
+                "delete",
+                1,
+                started_at,
+                service.delete_message(message_id).await,
+            );
         });
     }
 
@@ -301,15 +321,38 @@ impl MessageSearchService {
         }
 
         let service = self.clone();
+        let document_count = message_ids.len();
+        let started_at = Instant::now();
         tokio::spawn(async move {
             service.record_index_result(
                 "delete_batch",
+                document_count,
+                started_at,
                 service.delete_message_ids(message_ids).await,
             );
         });
     }
 
     pub async fn run_reindex(
+        &self,
+        db: &Pool<ConnectionManager<PgConnection>>,
+        batch_size: i64,
+    ) -> Result<usize, MessageSearchError> {
+        let started_at = Instant::now();
+        let result = self.run_reindex_inner(db, batch_size).await;
+        let (result_label, document_count) = match &result {
+            Ok(indexed) => ("success", *indexed),
+            Err(_) => ("failure", 0),
+        };
+        self.metrics.record_message_search_reindex(
+            result_label,
+            started_at.elapsed().as_secs_f64(),
+            document_count,
+        );
+        result
+    }
+
+    async fn run_reindex_inner(
         &self,
         db: &Pool<ConnectionManager<PgConnection>>,
         batch_size: i64,
@@ -418,20 +461,53 @@ impl MessageSearchService {
 
     fn upsert_document_best_effort(self: &Arc<Self>, document: MessageSearchDocument) {
         let service = self.clone();
+        let started_at = Instant::now();
         tokio::spawn(async move {
-            service.record_index_result("upsert", service.upsert_document(document).await);
+            service.record_index_result(
+                "upsert",
+                1,
+                started_at,
+                service.upsert_document(document).await,
+            );
         });
     }
 
-    fn record_index_result(&self, operation: &'static str, result: Result<(), MessageSearchError>) {
+    fn record_index_result(
+        &self,
+        operation: &'static str,
+        document_count: usize,
+        started_at: Instant,
+        result: Result<(), MessageSearchError>,
+    ) {
+        let duration_seconds = started_at.elapsed().as_secs_f64();
         match result {
             Ok(()) => {
                 self.metrics
                     .record_message_search_index_operation(operation, "success");
+                self.metrics.record_message_search_index_operation_duration(
+                    operation,
+                    "success",
+                    duration_seconds,
+                );
+                self.metrics.record_message_search_index_documents(
+                    operation,
+                    "success",
+                    document_count,
+                );
             }
             Err(err) => {
                 self.metrics
                     .record_message_search_index_operation(operation, "failure");
+                self.metrics.record_message_search_index_operation_duration(
+                    operation,
+                    "failure",
+                    duration_seconds,
+                );
+                self.metrics.record_message_search_index_documents(
+                    operation,
+                    "failure",
+                    document_count,
+                );
                 tracing::warn!(operation, ?err, "message search indexing operation failed");
             }
         }
@@ -512,27 +588,45 @@ pub fn project_message_document(message: &Message) -> Option<MessageSearchDocume
     })
 }
 
-pub fn filter_authoritative_hits(
+pub fn filter_authoritative_hits_with_counts(
     chat_id: i64,
     candidates: &[SearchHitCandidate],
     rows: Vec<Message>,
-) -> Vec<Message> {
+) -> AuthoritativeSearchHits {
     let mut rows_by_id = rows
         .into_iter()
         .map(|message| (message.id, message))
         .collect::<HashMap<_, _>>();
+    let mut drops = SearchCandidateDropCounts::default();
 
-    candidates
+    let messages = candidates
         .iter()
         .filter_map(|candidate| {
-            let message = rows_by_id.remove(&candidate.message_id)?;
+            let Some(message) = rows_by_id.remove(&candidate.message_id) else {
+                drops.missing_db_row += 1;
+                return None;
+            };
+
             if message.chat_id != chat_id {
+                drops.wrong_chat += 1;
                 return None;
             }
-            let document = project_message_document(&message)?;
-            (document.version == candidate.version).then_some(message)
+
+            let Some(document) = project_message_document(&message) else {
+                drops.not_searchable += 1;
+                return None;
+            };
+
+            if document.version != candidate.version {
+                drops.stale_version += 1;
+                return None;
+            }
+
+            Some(message)
         })
-        .collect()
+        .collect();
+
+    AuthoritativeSearchHits { messages, drops }
 }
 
 fn project_message_response_document(response: &MessageResponse) -> Option<MessageSearchDocument> {
@@ -653,7 +747,7 @@ mod tests {
     use crate::models::{Message, MessageType, TranscodeStatus};
 
     use super::{
-        filter_authoritative_hits, normalize_search_text, project_message_document,
+        filter_authoritative_hits_with_counts, normalize_search_text, project_message_document,
         validate_search_query, SearchHitCandidate,
     };
 
@@ -755,7 +849,7 @@ mod tests {
             },
         ];
 
-        let filtered = filter_authoritative_hits(10, &candidates, rows);
+        let filtered = filter_authoritative_hits_with_counts(10, &candidates, rows).messages;
 
         assert_eq!(
             filtered
@@ -764,5 +858,62 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![1]
         );
+    }
+
+    #[test]
+    fn authoritative_filter_counts_drop_reasons() {
+        let fresh = message(1, Some("fresh"));
+        let mut wrong_chat = message(2, Some("wrong chat"));
+        wrong_chat.chat_id = 11;
+        let mut deleted = message(3, Some("deleted"));
+        deleted.deleted_at = Some(Utc::now());
+        let edited = {
+            let mut msg = message(4, Some("edited"));
+            msg.updated_at = Some(
+                Utc.timestamp_millis_opt(1_700_000_100_000)
+                    .single()
+                    .unwrap(),
+            );
+            msg
+        };
+
+        let rows = vec![fresh.clone(), wrong_chat.clone(), deleted, edited.clone()];
+        let candidates = vec![
+            SearchHitCandidate {
+                message_id: 99,
+                version: 1,
+            },
+            SearchHitCandidate {
+                message_id: wrong_chat.id,
+                version: project_message_document(&wrong_chat).unwrap().version,
+            },
+            SearchHitCandidate {
+                message_id: 3,
+                version: 1,
+            },
+            SearchHitCandidate {
+                message_id: edited.id,
+                version: 1,
+            },
+            SearchHitCandidate {
+                message_id: fresh.id,
+                version: project_message_document(&fresh).unwrap().version,
+            },
+        ];
+
+        let result = filter_authoritative_hits_with_counts(10, &candidates, rows);
+
+        assert_eq!(
+            result
+                .messages
+                .iter()
+                .map(|message| message.id)
+                .collect::<Vec<_>>(),
+            vec![fresh.id]
+        );
+        assert_eq!(result.drops.missing_db_row, 1);
+        assert_eq!(result.drops.wrong_chat, 1);
+        assert_eq!(result.drops.not_searchable, 1);
+        assert_eq!(result.drops.stale_version, 1);
     }
 }

@@ -7,6 +7,7 @@ use axum::{
 use chrono::Utc;
 use diesel::prelude::*;
 use diesel::PgConnection;
+use std::time::Instant;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
@@ -20,7 +21,8 @@ use crate::{
     models::{GroupRole, Message, MessageType},
     schema::{attachments, group_membership, groups, messages},
     services::message_search::{
-        filter_authoritative_hits, validate_search_query, MessageSearchSort,
+        filter_authoritative_hits_with_counts, validate_search_query, MessageSearchSort,
+        SearchCandidateDropCounts,
     },
     utils::{auth::CurrentUid, pagination::validate_limit},
     AppState, MAX_MESSAGES_LIMIT,
@@ -340,18 +342,20 @@ async fn search_messages(
     mut conn: DbConn,
     Query(params): Query<SearchMessagesQuery>,
 ) -> Result<Json<SearchMessagesResponse>, AppError> {
+    let started_at = Instant::now();
     let conn = &mut *conn;
-
-    check_membership(conn, chat_id, uid)?;
-
     let sort = params.sort.unwrap_or(MessageSearchSort::Relevance);
     let sort_label = sort.as_str();
+
+    if let Err(err) = check_membership(conn, chat_id, uid) {
+        record_search_query_metrics(&state.metrics, sort_label, "failure", started_at);
+        return Err(err);
+    }
+
     let query = match validate_search_query(&params.q) {
         Ok(query) => query,
         Err(_) => {
-            state
-                .metrics
-                .record_message_search_query(sort_label, "failure");
+            record_search_query_metrics(&state.metrics, sort_label, "failure", started_at);
             return Err(AppError::BadRequest(
                 "Search query must be at least 2 characters",
             ));
@@ -361,9 +365,7 @@ async fn search_messages(
     let offset = params.offset.unwrap_or(0);
 
     let Some(search_service) = state.message_search.clone() else {
-        state
-            .metrics
-            .record_message_search_query(sort_label, "failure");
+        record_search_query_metrics(&state.metrics, sort_label, "failure", started_at);
         return Err(AppError::ServiceUnavailable("Message search unavailable"));
     };
 
@@ -373,9 +375,7 @@ async fn search_messages(
     {
         Ok(page) => page,
         Err(err) => {
-            state
-                .metrics
-                .record_message_search_query(sort_label, "failure");
+            record_search_query_metrics(&state.metrics, sort_label, "failure", started_at);
             tracing::warn!(
                 chat_id,
                 sort = sort_label,
@@ -385,11 +385,13 @@ async fn search_messages(
             return Err(AppError::ServiceUnavailable("Message search unavailable"));
         }
     };
+    state
+        .metrics
+        .observe_message_search_candidates(sort_label, candidate_page.candidates.len());
 
     if candidate_page.candidates.is_empty() {
-        state
-            .metrics
-            .record_message_search_query(sort_label, "success");
+        state.metrics.observe_message_search_results(sort_label, 0);
+        record_search_query_metrics(&state.metrics, sort_label, "success", started_at);
         return Ok(Json(SearchMessagesResponse {
             messages: Vec::new(),
             next_offset: candidate_page.next_offset,
@@ -409,25 +411,49 @@ async fn search_messages(
     {
         Ok(rows) => rows,
         Err(err) => {
-            state
-                .metrics
-                .record_message_search_query(sort_label, "failure");
+            record_search_query_metrics(&state.metrics, sort_label, "failure", started_at);
             return Err(err.into());
         }
     };
 
-    let authoritative_messages =
-        filter_authoritative_hits(chat_id, &candidate_page.candidates, rows);
-    let messages = attach_metadata(conn, authoritative_messages, &state, uid).await;
-
+    let authoritative_hits =
+        filter_authoritative_hits_with_counts(chat_id, &candidate_page.candidates, rows);
+    record_search_candidate_drops(&state.metrics, authoritative_hits.drops);
+    let messages = attach_metadata(conn, authoritative_hits.messages, &state, uid).await;
     state
         .metrics
-        .record_message_search_query(sort_label, "success");
+        .observe_message_search_results(sort_label, messages.len());
+
+    record_search_query_metrics(&state.metrics, sort_label, "success", started_at);
 
     Ok(Json(SearchMessagesResponse {
         messages,
         next_offset: candidate_page.next_offset,
     }))
+}
+
+fn record_search_query_metrics(
+    metrics: &crate::metrics::Metrics,
+    sort_label: &str,
+    result: &str,
+    started_at: Instant,
+) {
+    metrics.record_message_search_query(sort_label, result);
+    metrics.record_message_search_query_duration(
+        sort_label,
+        result,
+        started_at.elapsed().as_secs_f64(),
+    );
+}
+
+fn record_search_candidate_drops(
+    metrics: &crate::metrics::Metrics,
+    drops: SearchCandidateDropCounts,
+) {
+    metrics.record_message_search_candidate_drop("missing_db_row", drops.missing_db_row);
+    metrics.record_message_search_candidate_drop("wrong_chat", drops.wrong_chat);
+    metrics.record_message_search_candidate_drop("not_searchable", drops.not_searchable);
+    metrics.record_message_search_candidate_drop("stale_version", drops.stale_version);
 }
 
 /// GET /chats/:chat_id/messages/:message_id — Get a single message.
