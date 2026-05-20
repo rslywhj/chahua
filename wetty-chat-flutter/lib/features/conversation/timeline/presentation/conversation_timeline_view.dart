@@ -11,6 +11,7 @@ import 'package:chahua/features/conversation/shared/domain/launch_request.dart';
 import 'package:chahua/features/conversation/timeline/model/conversation_message_highlight.dart';
 import 'package:chahua/features/conversation/timeline/model/message_long_press_details_v2.dart';
 import 'package:chahua/features/conversation/timeline/model/message_visibility_window.dart';
+import 'package:chahua/features/conversation/timeline/model/timeline_viewport_geometry.dart';
 import 'package:chahua/features/conversation/message_bubble/presentation/message_row_v2.dart';
 import 'package:chahua/features/conversation/timeline/presentation/jump_to_latest_fab.dart';
 import 'package:chahua/l10n/app_localizations.dart';
@@ -29,42 +30,15 @@ double resolveTopPreferredAnchorAlignment({
   if (viewportExtent <= 0) {
     return 0;
   }
-  final visibleFractionBelowAnchor = (afterExtent / viewportExtent).clamp(
-    0.0,
-    1.0,
+  final alignment = resolveTimelineTopPreferredAnchorAlignment(
+    afterExtent: afterExtent,
+    viewportExtent: viewportExtent,
   );
+  final visibleFractionBelowAnchor = 1.0 - alignment;
   log(
     'resolveTopPreferredAnchorAlignment: afterExtent=$afterExtent, viewportExtent=$viewportExtent, visibleFractionBelowAnchor=$visibleFractionBelowAnchor',
   );
-  return 1.0 - visibleFractionBelowAnchor;
-}
-
-MessageVisibilityWindow? _resolveMessageVisibilityWindow({
-  required Iterable<({int? messageId, double top, double bottom})> measurements,
-  required double viewportTop,
-  required double viewportBottom,
-}) {
-  final visible = <({int messageId, double top})>[];
-  for (final measurement in measurements) {
-    final messageId = measurement.messageId;
-    if (messageId == null) {
-      continue;
-    }
-    final visibleTop = measurement.top.clamp(viewportTop, viewportBottom);
-    final visibleBottom = measurement.bottom.clamp(viewportTop, viewportBottom);
-    if (visibleBottom <= visibleTop) {
-      continue;
-    }
-    visible.add((messageId: messageId, top: visibleTop));
-  }
-  if (visible.isEmpty) {
-    return null;
-  }
-  visible.sort((a, b) => a.top.compareTo(b.top));
-  return MessageVisibilityWindow(
-    firstVisibleMessageId: visible.first.messageId,
-    lastVisibleMessageId: visible.last.messageId,
-  );
+  return alignment;
 }
 
 class ConversationTimelineView extends ConsumerStatefulWidget {
@@ -270,7 +244,7 @@ class _ConversationTimelineViewState
     final viewportTopLeft = viewportBox.localToGlobal(Offset.zero);
     final viewportTop = viewportTopLeft.dy;
     final viewportBottom = viewportTop + viewportBox.size.height;
-    final measurements = <({int? messageId, double top, double bottom})>[];
+    final measurements = <TimelineMessageGeometry>[];
 
     for (final entry in _renderedMessagesByStableKey.entries) {
       final renderObject = _messageKeys[entry.key]?.currentContext
@@ -280,14 +254,17 @@ class _ConversationTimelineViewState
       }
 
       final topLeft = renderObject.localToGlobal(Offset.zero);
-      measurements.add((
-        messageId: entry.value.serverMessageId,
-        top: topLeft.dy,
-        bottom: topLeft.dy + renderObject.size.height,
-      ));
+      measurements.add(
+        TimelineMessageGeometry(
+          stableKey: entry.key,
+          messageId: entry.value.serverMessageId,
+          top: topLeft.dy,
+          bottom: topLeft.dy + renderObject.size.height,
+        ),
+      );
     }
 
-    final nextVisibilityWindow = _resolveMessageVisibilityWindow(
+    final nextVisibilityWindow = resolveTimelineMessageVisibilityWindow(
       measurements: measurements,
       viewportTop: viewportTop,
       viewportBottom: viewportBottom,
