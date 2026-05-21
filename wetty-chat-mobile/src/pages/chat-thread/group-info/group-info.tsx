@@ -82,9 +82,11 @@ function GroupInfoContent({
       />
 
       <div className={styles.shareActions}>
-        <GroupSettingsActionButton icon={searchOutline} onClick={onOpenSearch}>
-          <Trans>Search</Trans>
-        </GroupSettingsActionButton>
+        <FeatureGate feature="messageSearch">
+          <GroupSettingsActionButton icon={searchOutline} onClick={onOpenSearch}>
+            <Trans>Search</Trans>
+          </GroupSettingsActionButton>
+        </FeatureGate>
 
         <ChatMuteSettingItem chatId={chatId} mutedUntil={mutedUntil} archived={archived} />
 
