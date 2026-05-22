@@ -16,6 +16,7 @@ import '../application/all_list_v2_view_model.dart';
 import '../application/group_list_v2_view_model.dart';
 import '../application/thread_list_v2_view_model.dart';
 import 'widgets/chat_list_v2_tab_body.dart';
+import 'widgets/websocket_connection_banner.dart';
 
 class ChatListV2Page extends ConsumerStatefulWidget {
   const ChatListV2Page({
@@ -175,6 +176,7 @@ class _ChatListV2PageState extends ConsumerState<ChatListV2Page> {
           CupertinoSliverRefreshControl(
             onRefresh: () => _refreshActiveTab(activeTab),
           ),
+        const WebSocketConnectionBannerSliver(),
         ChatListV2TabBody(
           activeTab: activeTab,
           selectedChatId: widget.selectedChatId,

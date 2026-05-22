@@ -159,5 +159,9 @@
   "swipeActionMarkUnread": "未读",
   "swipeActionArchive": "归档",
   "swipeActionUnarchive": "取消归档",
+  "webSocketReconnectingTitle": "正在重新连接…",
+  "webSocketReconnectingMessage": "消息可能会延迟。",
+  "webSocketConnectingTitle": "正在连接…",
+  "webSocketConnectingMessage": "实时更新很快恢复。",
   "selectChatPlaceholder": "选择一个聊天"
 }

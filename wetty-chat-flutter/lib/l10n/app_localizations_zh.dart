@@ -471,6 +471,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get swipeActionUnarchive => '取消归档';
 
   @override
+  String get webSocketReconnectingTitle => '正在重新连接…';
+
+  @override
+  String get webSocketReconnectingMessage => '消息可能会延迟。';
+
+  @override
+  String get webSocketConnectingTitle => '正在连接…';
+
+  @override
+  String get webSocketConnectingMessage => '实时更新很快恢复。';
+
+  @override
   String get selectChatPlaceholder => '选择一个聊天';
 }
 
@@ -939,6 +951,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get swipeActionUnarchive => '取消封存';
+
+  @override
+  String get webSocketReconnectingTitle => '正在重新連線…';
+
+  @override
+  String get webSocketReconnectingMessage => '訊息可能會延遲。';
+
+  @override
+  String get webSocketConnectingTitle => '正在連線…';
+
+  @override
+  String get webSocketConnectingMessage => '即時更新很快恢復。';
 
   @override
   String get selectChatPlaceholder => '選擇一個聊天';

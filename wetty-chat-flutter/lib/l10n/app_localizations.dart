@@ -999,6 +999,30 @@ abstract class AppLocalizations {
   /// **'Unarchive'**
   String get swipeActionUnarchive;
 
+  /// Title shown when realtime websocket is reconnecting
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting...'**
+  String get webSocketReconnectingTitle;
+
+  /// Message shown when realtime websocket is reconnecting
+  ///
+  /// In en, this message translates to:
+  /// **'Messages may be delayed.'**
+  String get webSocketReconnectingMessage;
+
+  /// Title shown while realtime websocket is connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting...'**
+  String get webSocketConnectingTitle;
+
+  /// Message shown while realtime websocket is connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime updates will resume shortly.'**
+  String get webSocketConnectingMessage;
+
   /// Placeholder in the desktop split view when no chat is selected
   ///
   /// In en, this message translates to:

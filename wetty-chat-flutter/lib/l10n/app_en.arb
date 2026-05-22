@@ -473,6 +473,18 @@
   "swipeActionUnarchive": "Unarchive",
   "@swipeActionUnarchive": { "description": "Swipe action label to unarchive a thread" },
 
+  "webSocketReconnectingTitle": "Reconnecting...",
+  "@webSocketReconnectingTitle": { "description": "Title shown when realtime websocket is reconnecting" },
+
+  "webSocketReconnectingMessage": "Messages may be delayed.",
+  "@webSocketReconnectingMessage": { "description": "Message shown when realtime websocket is reconnecting" },
+
+  "webSocketConnectingTitle": "Connecting...",
+  "@webSocketConnectingTitle": { "description": "Title shown while realtime websocket is connecting" },
+
+  "webSocketConnectingMessage": "Realtime updates will resume shortly.",
+  "@webSocketConnectingMessage": { "description": "Message shown while realtime websocket is connecting" },
+
   "selectChatPlaceholder": "Select a chat",
   "@selectChatPlaceholder": { "description": "Placeholder in the desktop split view when no chat is selected" }
 }

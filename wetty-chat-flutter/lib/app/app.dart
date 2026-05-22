@@ -81,6 +81,7 @@ class _WettyChatAppState extends ConsumerState<WettyChatApp>
     final session = ref.watch(authSessionProvider);
     ref.watch(unreadBadgeProvider);
     ref.watch(wsEventRouterProvider);
+    ref.watch(webSocketReconnectRecoveryProvider);
 
     // Keep ApiSession bridge in sync for deep presentation-layer code.
     ApiSession.updateSession(

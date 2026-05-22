@@ -498,5 +498,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get swipeActionUnarchive => 'Unarchive';
 
   @override
+  String get webSocketReconnectingTitle => 'Reconnecting...';
+
+  @override
+  String get webSocketReconnectingMessage => 'Messages may be delayed.';
+
+  @override
+  String get webSocketConnectingTitle => 'Connecting...';
+
+  @override
+  String get webSocketConnectingMessage =>
+      'Realtime updates will resume shortly.';
+
+  @override
   String get selectChatPlaceholder => 'Select a chat';
 }
