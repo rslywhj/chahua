@@ -173,6 +173,180 @@ void main() {
     );
 
     testWidgets(
+      'around response with no newer page still lets user reach loaded tail',
+      (tester) async {
+        final api = _FakeMessageApiService(
+          const [],
+          aroundResponses: {
+            40: _response(
+              messages: _messages(36, 60),
+              nextCursor: '35',
+              prevCursor: null,
+            ),
+          },
+        );
+        final container = await _container(api);
+        addTearDown(container.dispose);
+
+        await _pumpTimeline(
+          tester,
+          container: container,
+          viewportHeight: 600,
+          launchRequest: const LaunchRequest.message(
+            messageId: 40,
+            highlight: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(api.requests.any((request) => request.around == 40), isTrue);
+        _expectRowVisibleInViewport(tester, 40);
+
+        final state = container.read(
+          conversationTimelineViewModelProvider(_identity),
+        );
+        expect(
+          [
+            ...state.beforeMessages,
+            ...state.afterMessages,
+          ].map((message) => message.serverMessageId),
+          containsAll(<int>[40, 60]),
+        );
+        expect(state.canLoadNewer, isFalse);
+
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+        await tester.pumpAndSettle();
+
+        expect(api.requests.any((request) => request.after != null), isFalse);
+        _expectRowVisibleInViewport(tester, 60);
+      },
+    );
+
+    testWidgets(
+      'continues loading newer messages when first newer page leaves viewport at edge',
+      (tester) async {
+        final api = _FakeMessageApiService(
+          const [],
+          aroundResponses: {
+            58: _response(
+              messages: _messages(36, 60),
+              nextCursor: '35',
+              prevCursor: '61',
+            ),
+          },
+          afterResponses: {
+            60: _response(messages: _messages(61, 62), prevCursor: '63'),
+            62: _response(messages: _messages(63, 80), prevCursor: null),
+          },
+        );
+        final container = await _container(api);
+        addTearDown(container.dispose);
+
+        await _pumpTimeline(
+          tester,
+          container: container,
+          viewportHeight: 360,
+          launchRequest: const LaunchRequest.message(
+            messageId: 58,
+            highlight: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        _expectRowVisibleInViewport(tester, 58);
+
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -160));
+        await tester.pump();
+        await tester.pump();
+
+        expect(api.requests.any((request) => request.after == 60), isTrue);
+        expect(api.requests.any((request) => request.after == 62), isTrue);
+        _expectRowVisibleInViewport(tester, 63);
+      },
+    );
+
+    testWidgets(
+      'continues loading newer messages after a delayed newer page resolves at edge',
+      (tester) async {
+        final api = _FakeMessageApiService(
+          const [],
+          aroundResponses: {
+            58: _response(
+              messages: _messages(36, 60),
+              nextCursor: '35',
+              prevCursor: '61',
+            ),
+          },
+          afterResponses: {
+            60: _response(messages: _messages(61, 62), prevCursor: '63'),
+            62: _response(messages: _messages(63, 80), prevCursor: null),
+          },
+          responseDelay: const Duration(milliseconds: 50),
+        );
+        final container = await _container(api);
+        addTearDown(container.dispose);
+
+        await _pumpTimeline(
+          tester,
+          container: container,
+          viewportHeight: 360,
+          launchRequest: const LaunchRequest.message(
+            messageId: 58,
+            highlight: false,
+          ),
+        );
+        await tester.pumpAndSettle();
+        _expectRowVisibleInViewport(tester, 58);
+
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -160));
+        await tester.pump();
+        expect(api.requests.any((request) => request.after == 60), isTrue);
+
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.pump();
+
+        expect(api.requests.any((request) => request.after == 62), isTrue);
+        _expectRowVisibleInViewport(tester, 63);
+      },
+    );
+
+    testWidgets(
+      'loads newer messages after unread launch omits read boundary',
+      (tester) async {
+        final api = _FakeMessageApiService(
+          const [],
+          aroundResponses: {
+            20: _response(
+              messages: _messages(21, 40),
+              nextCursor: '20',
+              prevCursor: '41',
+            ),
+          },
+          afterResponses: {
+            40: _response(messages: _messages(41, 60), prevCursor: null),
+          },
+        );
+        final container = await _container(api);
+        addTearDown(container.dispose);
+
+        await _pumpTimeline(
+          tester,
+          container: container,
+          viewportHeight: 360,
+          launchRequest: const LaunchRequest.unread(lastReadMessageId: 20),
+        );
+        await tester.pumpAndSettle();
+        _expectRowVisibleInViewport(tester, 21);
+
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+        await tester.pumpAndSettle();
+
+        expect(api.requests.any((request) => request.after == 40), isTrue);
+        _expectRowVisibleInViewport(tester, 60);
+        await _flushHighlightClearTimer(tester);
+      },
+    );
+
+    testWidgets(
       'unread launch renders first unread row when response omits read boundary',
       (tester) async {
         final api = _FakeMessageApiService(
@@ -623,11 +797,16 @@ class _FakeMessageApiService extends MessageApiServiceV2 {
   _FakeMessageApiService(
     this.messages, {
     Map<int, ListMessagesResponseDto>? aroundResponses,
+    Map<int, ListMessagesResponseDto>? afterResponses,
+    this.responseDelay,
   }) : aroundResponses = aroundResponses ?? const {},
+       afterResponses = afterResponses ?? const {},
        super(Dio(), 7);
 
   final List<MessageItemDto> messages;
   final Map<int, ListMessagesResponseDto> aroundResponses;
+  final Map<int, ListMessagesResponseDto> afterResponses;
+  final Duration? responseDelay;
   final requests = <({int? before, int? after, int? around, int? max})>[];
 
   @override
@@ -642,6 +821,14 @@ class _FakeMessageApiService extends MessageApiServiceV2 {
     final aroundResponse = aroundResponses[around];
     if (aroundResponse != null) {
       return aroundResponse;
+    }
+    final afterResponse = afterResponses[after];
+    if (afterResponse != null) {
+      final delay = responseDelay;
+      if (delay != null) {
+        await Future<void>.delayed(delay);
+      }
+      return afterResponse;
     }
     return ListMessagesResponseDto(messages: messages);
   }
