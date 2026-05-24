@@ -19,6 +19,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('ConversationTimelineView live edge behavior', () {
+    // Use case:
+    // A brand-new group has no messages yet. Opening the latest timeline should
+    // complete bootstrap and show a blank timeline instead of a permanent
+    // loading spinner.
     testWidgets('hides loading spinner when latest conversation is empty', (
       tester,
     ) async {
@@ -32,6 +36,10 @@ void main() {
       expect(find.byType(CupertinoActivityIndicator), findsNothing);
     });
 
+    // Use case:
+    // The user is at the live edge and the latest message receives reactions.
+    // The row grows taller, but the latest message should remain pinned to the
+    // bottom instead of being pushed partly off-screen.
     testWidgets(
       'keeps latest message visible when latest row gains reactions at live edge',
       (tester) async {
@@ -55,6 +63,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // The user is at the live edge and the visible viewport shrinks, such as
+    // when the keyboard opens. The current latest message should remain visible
+    // at the bottom after layout settles.
     testWidgets(
       'keeps latest message visible when live-edge viewport shrinks',
       (tester) async {
@@ -74,6 +86,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Keyboard resize and a latest-message mutation can happen in the same UI
+    // turn. The live-edge correction should handle both size changes together
+    // and keep the latest row pinned.
     testWidgets(
       'keeps latest message visible when viewport shrink and reaction mutation combine',
       (tester) async {
@@ -98,6 +114,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // A user who intentionally drags away from the live edge should be allowed
+    // to browse history. The timeline must not behave as permanently sticky to
+    // the bottom after live-edge follow has been enabled.
     testWidgets('allows the user to scroll away from live edge', (
       tester,
     ) async {
@@ -119,6 +139,10 @@ void main() {
       _expectRowBottomBelowViewport(tester, 20);
     });
 
+    // Use case:
+    // The user is currently sticky at latest, then taps a search result, pin, or
+    // other jump target inside the loaded segment. The jump must reveal the
+    // target row instead of live-edge settling back to the tail.
     testWidgets(
       'jump to message from sticky live edge reveals the target row',
       (tester) async {
@@ -140,6 +164,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // A jump target is outside the currently loaded latest window. The timeline
+    // should fetch an around-window for that historical message and display the
+    // target rather than keeping the latest segment on screen.
     testWidgets(
       'far jump loads a historical segment and reveals the target row',
       (tester) async {
@@ -172,6 +200,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Backend around pagination can include all newer rows while returning
+    // prevCursor=null. In that state Flutter should know no newer request is
+    // needed, but the already-loaded tail must still be reachable by scrolling.
     testWidgets(
       'around response with no newer page still lets user reach loaded tail',
       (tester) async {
@@ -222,6 +254,51 @@ void main() {
       },
     );
 
+    // Use case:
+    // A push notification can point at message 40, but that message may have
+    // been recalled before the user opens the app. Backend around=40 filters the
+    // deleted row out and returns nearby visible rows; the timeline should
+    // render the nearest row instead of spinning forever.
+    testWidgets(
+      'message launch stops loading when recalled target is omitted',
+      (tester) async {
+        final api = _FakeMessageApiService(
+          const [],
+          aroundResponses: {
+            40: _response(
+              messages: <MessageItemDto>[
+                ..._messages(36, 39),
+                ..._messages(41, 60),
+              ],
+              nextCursor: '35',
+              prevCursor: null,
+            ),
+          },
+        );
+        final container = await _container(api);
+        addTearDown(container.dispose);
+
+        await _pumpTimeline(
+          tester,
+          container: container,
+          viewportHeight: 600,
+          launchRequest: const LaunchRequest.message(
+            messageId: 40,
+            highlight: false,
+          ),
+        );
+        await _settleTimeline(tester);
+
+        expect(api.requests.any((request) => request.around == 40), isTrue);
+        expect(find.byType(CupertinoActivityIndicator), findsNothing);
+        _expectRowVisibleInViewport(tester, 41);
+      },
+    );
+
+    // Use case:
+    // The user opens around a historical message and scrolls toward newer
+    // content. If the first newer page is too short to fill the bottom edge, the
+    // viewport should keep requesting newer pages until it has renderable rows.
     testWidgets(
       'continues loading newer messages when first newer page leaves viewport at edge',
       (tester) async {
@@ -264,6 +341,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Same as the short-page case, but the newer response arrives
+    // asynchronously. Once the delayed page is inserted while the viewport is
+    // still at the bottom edge, loading should continue without another drag.
     testWidgets(
       'continues loading newer messages after a delayed newer page resolves at edge',
       (tester) async {
@@ -309,6 +390,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Unread launch around lastRead=20 returns the first unread page, then the
+    // user scrolls toward newer messages. The timeline should issue after=40
+    // and render the loaded latest row instead of stopping at the first window.
     testWidgets(
       'loads newer messages after unread launch omits read boundary',
       (tester) async {
@@ -346,6 +431,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Backend around lastRead=20 can omit the read-boundary row and return only
+    // unread rows 21..40. The unread launch should still stop bootstrapping and
+    // reveal the first unread message.
     testWidgets(
       'unread launch renders first unread row when response omits read boundary',
       (tester) async {
@@ -377,6 +466,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Unread launch can land on a window that already reaches latest. If the
+    // user is at that unread live edge, a new incoming message should pin to the
+    // bottom like latest mode.
     testWidgets(
       'pins incoming message after unread launch reaches latest slice',
       (tester) async {
@@ -409,6 +502,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // After unread launch reaches latest and the user is at the unread tail, a
+    // keyboard-style viewport shrink should keep the latest unread row visible
+    // instead of hiding it below the compose area.
     testWidgets(
       'keeps unread latest row pinned when unread live-edge viewport shrinks',
       (tester) async {
@@ -446,6 +543,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Combine unread live-edge mode, viewport shrink, and a newly incoming
+    // message. The timeline should preserve tail visibility after the resize and
+    // then pin the appended row.
     testWidgets(
       'pins incoming message after unread live-edge viewport shrinks',
       (tester) async {
@@ -488,6 +589,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // Latest data can be entirely before the CustomScrollView center sliver
+    // during live-edge mode. Appending a new message should still move the tail
+    // to the viewport bottom.
     testWidgets(
       'pins incoming message when latest segment is entirely before center',
       (tester) async {
@@ -507,6 +612,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // The user is at live edge, the keyboard shrinks the viewport, and then a
+    // realtime message arrives. The appended row should be visible at the bottom
+    // after both layout and data changes settle.
     testWidgets('pins incoming message after live-edge viewport shrinks', (
       tester,
     ) async {
@@ -527,6 +636,10 @@ void main() {
       _expectRowBottomPinnedToViewport(tester, 21);
     });
 
+    // Use case:
+    // The user is still within the near-bottom threshold, not exactly pinned,
+    // and the latest message grows because reactions are added. Near-live-edge
+    // policy should re-pin the latest row.
     testWidgets(
       're-pins latest message when it mutates while viewport is near live edge',
       (tester) async {
@@ -553,6 +666,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // The user is near live edge and a row above latest grows, such as a
+    // reaction or media metadata update on message 19. Even though the tail row
+    // did not change, the latest message should remain pinned.
     testWidgets(
       're-pins latest message when a row above it mutates while viewport is near live edge',
       (tester) async {
@@ -577,6 +694,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // The user is near live edge but not exactly at the tail, then the viewport
+    // shrinks. The timeline should treat this as follow-live-edge and keep the
+    // latest message visible.
     testWidgets(
       're-pins latest message when viewport shrinks while viewport is near live edge',
       (tester) async {
@@ -597,6 +718,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // A near-live-edge viewport shrink and latest-row mutation happen together.
+    // This protects the combined case that most closely resembles keyboard open
+    // plus a realtime reaction update.
     testWidgets(
       're-pins latest message when near-live-edge viewport shrinks and latest row mutates',
       (tester) async {
@@ -622,6 +747,10 @@ void main() {
       },
     );
 
+    // Use case:
+    // The user is within the near-bottom threshold and a new message arrives.
+    // The timeline should follow the append and pin the new row instead of
+    // preserving the old scroll offset.
     testWidgets('pins newly appended message when viewport is near live edge', (
       tester,
     ) async {
@@ -642,6 +771,9 @@ void main() {
       _expectRowBottomPinnedToViewport(tester, 21);
     });
 
+    // Use case:
+    // Near-live-edge state, keyboard shrink, and a new append happen in order.
+    // The new message should still be pinned after the viewport size change.
     testWidgets(
       'pins newly appended message when near-live-edge viewport shrinks',
       (tester) async {

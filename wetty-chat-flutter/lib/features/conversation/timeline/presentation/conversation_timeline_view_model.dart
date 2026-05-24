@@ -373,23 +373,31 @@ class ConversationTimelineViewModel
     int messageId, {
     bool highlight = true,
   }) async {
-    unawaited(
-      _repository.refreshAroundServerMessageId(
-        messageId,
-        limit: _initialLoadedWindowSize,
-      ),
+    final anchorMessageId = await _repository.refreshAroundServerMessageId(
+      messageId,
+      limit: _initialLoadedWindowSize,
     );
 
-    final aroundMode = ConversationTimelineActiveSegmentMode.around(messageId);
+    if (anchorMessageId == null) {
+      await jumpToLatest();
+      return;
+    }
+
+    final aroundMode = ConversationTimelineActiveSegmentMode.around(
+      anchorMessageId,
+    );
     _setActiveSegmentMode(aroundMode);
-    _highlightedServerMessageId = highlight ? messageId : null;
+    final canHighlightTarget = highlight && anchorMessageId == messageId;
+    _highlightedServerMessageId = canHighlightTarget ? messageId : null;
     _highlightFirstServerMessageIdAfter = null;
-    _pendingHighlightGeneration = highlight ? ++_highlightGeneration : null;
-    if (!highlight) {
+    _pendingHighlightGeneration = canHighlightTarget
+        ? ++_highlightGeneration
+        : null;
+    if (!canHighlightTarget) {
       _clearHighlightSignal();
     }
     _renderSplitPolicy = _TimelineRenderSplitPolicy.fromMessageInclusive(
-      messageId,
+      anchorMessageId,
     );
     _issueViewportCommand(
       kind: ConversationTimelineViewportCommandKind.resetToCenterOrigin,

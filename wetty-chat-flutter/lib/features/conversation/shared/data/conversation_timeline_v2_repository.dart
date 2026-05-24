@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:developer';
 
-import 'package:chahua/features/conversation/shared/application/conversation_canonical_message_store.dart';
+import 'package:chahua/core/api/models/messages_api_models.dart';
 import 'package:chahua/features/conversation/compose/data/message_api_service_v2.dart';
-import 'package:chahua/features/shared/model/message/message.dart';
-import 'package:chahua/features/conversation/shared/domain/conversation_timeline_v2_canonical_scope.dart';
+import 'package:chahua/features/conversation/shared/application/conversation_canonical_message_store.dart';
 import 'package:chahua/features/conversation/shared/domain/conversation_identity.dart';
+import 'package:chahua/features/conversation/shared/domain/conversation_timeline_v2_canonical_scope.dart';
 import 'package:chahua/features/shared/data/read_state_repository.dart';
+import 'package:chahua/features/shared/model/message/message.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ConversationTimelineV2Repository {
@@ -263,7 +264,7 @@ class ConversationTimelineV2Repository {
     return _loadNewerAfterAnchor(anchorServerMessageId, limit: limit);
   }
 
-  Future<void> refreshAroundServerMessageId(
+  Future<int?> refreshAroundServerMessageId(
     int targetServerMessageId, {
     required int limit,
   }) {
@@ -353,7 +354,7 @@ class ConversationTimelineV2Repository {
     }
   }
 
-  Future<void> _refreshAroundServerMessageId(
+  Future<int?> _refreshAroundServerMessageId(
     int targetServerMessageId, {
     required int limit,
   }) async {
@@ -369,15 +370,13 @@ class ConversationTimelineV2Repository {
     final hasReachedLatest = !hasMoreNewer;
 
     if (response.messages.isEmpty) {
-      return;
+      return null;
     }
 
-    final containsTarget = response.messages.any(
-      (message) => message.id == targetServerMessageId,
+    final resolvedAnchorMessageId = _nearestRenderableAroundAnchor(
+      response.messages,
+      targetServerMessageId,
     );
-    if (!containsTarget) {
-      return;
-    }
 
     ref
         .read(conversationTimelineMessageStoreProvider.notifier)
@@ -396,6 +395,8 @@ class ConversationTimelineV2Repository {
           .read(conversationTimelineMessageStoreProvider.notifier)
           .markReachedOldest(identity);
     }
+
+    return resolvedAnchorMessageId;
   }
 
   Future<int?> _refreshAroundReadBoundary(
@@ -441,6 +442,18 @@ class ConversationTimelineV2Repository {
       }
     }
     return response.messages.first.id;
+  }
+
+  int _nearestRenderableAroundAnchor(
+    List<MessageItemDto> messages,
+    int targetServerMessageId,
+  ) {
+    for (final message in messages) {
+      if (message.id >= targetServerMessageId) {
+        return message.id;
+      }
+    }
+    return messages.last.id;
   }
 }
 
