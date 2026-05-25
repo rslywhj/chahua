@@ -34,6 +34,8 @@
 	<string>Select photos from your library to share with your friends.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take photos to share in chat.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Include your current location in photos you take in chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save images and videos from chat to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
