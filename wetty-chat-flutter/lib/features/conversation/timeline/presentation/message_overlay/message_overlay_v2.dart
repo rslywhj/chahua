@@ -8,8 +8,9 @@ import 'message_overlay_action_v2.dart';
 import 'message_overlay_bubble_v2.dart';
 import 'message_overlay_controls_v2.dart';
 import 'message_overlay_layout_v2.dart';
+import 'message_overlay_reaction_picker_v2.dart';
 
-class MessageOverlayV2 extends StatelessWidget {
+class MessageOverlayV2 extends StatefulWidget {
   const MessageOverlayV2({
     super.key,
     required this.details,
@@ -27,9 +28,25 @@ class MessageOverlayV2 extends StatelessWidget {
   final VoidCallback onDismiss;
   final ValueChanged<String> onToggleReaction;
 
+  @override
+  State<MessageOverlayV2> createState() => _MessageOverlayV2State();
+}
+
+class _MessageOverlayV2State extends State<MessageOverlayV2> {
+  bool _reactionPickerExpanded = false;
+
   bool get _showReactionBar =>
-      !details.message.isDeleted &&
-      details.message.content is! StickerMessageContent;
+      !widget.details.message.isDeleted &&
+      widget.details.message.content is! StickerMessageContent;
+
+  @override
+  void didUpdateWidget(covariant MessageOverlayV2 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.details.message.stableKey !=
+        widget.details.message.stableKey) {
+      _reactionPickerExpanded = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,65 +55,78 @@ class MessageOverlayV2 extends StatelessWidget {
         final layout = MessageOverlayLayoutV2.calculate(
           viewportSize: constraints.biggest,
           mediaPadding: MediaQuery.paddingOf(context),
-          sourceBubbleRect: details.bubbleRect,
-          isMe: details.isMe,
-          actionCount: actions.length,
+          sourceBubbleRect: widget.details.bubbleRect,
+          isMe: widget.details.isMe,
+          actionCount: widget.actions.length,
           showReactionBar: _showReactionBar,
+          reactionPickerExpanded: _reactionPickerExpanded,
         );
 
         return Stack(
           clipBehavior: Clip.hardEdge,
           children: [
             Positioned.fill(
-              child: _OverlayBackdrop(visible: visible, onDismiss: onDismiss),
+              child: _OverlayBackdrop(
+                visible: widget.visible,
+                onDismiss: widget.onDismiss,
+              ),
             ),
             Positioned.fromRect(
               rect: layout.bubbleRect,
               child: _AnimatedOverlayChild(
-                visible: visible,
+                visible: widget.visible,
                 duration: const Duration(milliseconds: 160),
-                alignment: details.isMe
+                alignment: widget.details.isMe
                     ? Alignment.centerRight
                     : Alignment.centerLeft,
                 child: ClipRect(
                   child: OverflowBox(
-                    alignment: details.isMe
+                    alignment: widget.details.isMe
                         ? Alignment.topRight
                         : Alignment.topLeft,
                     minWidth: layout.bubbleRect.width,
                     maxWidth: layout.bubbleRect.width,
-                    maxHeight: details.bubbleRect.height,
-                    child: MessageOverlayBubbleV2(details: details),
+                    maxHeight: widget.details.bubbleRect.height,
+                    child: MessageOverlayBubbleV2(details: widget.details),
                   ),
                 ),
+              ),
+            ),
+            Positioned.fromRect(
+              rect: layout.actionPanelRect,
+              child: _AnimatedOverlayChild(
+                visible: widget.visible,
+                duration: const Duration(milliseconds: 180),
+                alignment: _alignmentFor(
+                  widget.details.isMe,
+                  layout.actionPanelSide,
+                ),
+                child: MessageOverlayActionPanelV2(actions: widget.actions),
               ),
             ),
             if (_showReactionBar)
               if (layout.reactionBarRect case final rect?)
-                Positioned.fromRect(
+                _AnimatedPositionedFromRect(
                   rect: rect,
+                  duration: const Duration(milliseconds: 180),
                   child: _AnimatedOverlayChild(
-                    visible: visible,
+                    visible: widget.visible,
                     duration: const Duration(milliseconds: 160),
                     alignment: _alignmentFor(
-                      details.isMe,
+                      widget.details.isMe,
                       layout.reactionBarSide,
                     ),
                     child: MessageOverlayReactionBarV2(
-                      emojis: quickReactionEmojis,
-                      onToggleReaction: onToggleReaction,
+                      emojis: widget.quickReactionEmojis,
+                      onToggleReaction: widget.onToggleReaction,
+                      onExpandedChanged: (expanded) {
+                        setState(() {
+                          _reactionPickerExpanded = expanded;
+                        });
+                      },
                     ),
                   ),
                 ),
-            Positioned.fromRect(
-              rect: layout.actionPanelRect,
-              child: _AnimatedOverlayChild(
-                visible: visible,
-                duration: const Duration(milliseconds: 180),
-                alignment: _alignmentFor(details.isMe, layout.actionPanelSide),
-                child: MessageOverlayActionPanelV2(actions: actions),
-              ),
-            ),
           ],
         );
       },
@@ -112,6 +142,31 @@ class MessageOverlayV2 extends StatelessWidget {
       (true, null) => Alignment.centerRight,
       (false, null) => Alignment.centerLeft,
     };
+  }
+}
+
+class _AnimatedPositionedFromRect extends StatelessWidget {
+  const _AnimatedPositionedFromRect({
+    required this.rect,
+    required this.duration,
+    required this.child,
+  });
+
+  final Rect rect;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedPositioned(
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      child: ClipRect(child: child),
+    );
   }
 }
 

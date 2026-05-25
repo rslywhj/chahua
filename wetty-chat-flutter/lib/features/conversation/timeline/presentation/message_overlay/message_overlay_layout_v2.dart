@@ -30,6 +30,7 @@ class MessageOverlayLayoutV2 {
     required bool isMe,
     required int actionCount,
     required bool showReactionBar,
+    bool reactionPickerExpanded = false,
   }) {
     final safeBounds = _safeBounds(viewportSize, mediaPadding);
     final bubbleRect = _bubbleRect(
@@ -40,7 +41,17 @@ class MessageOverlayLayoutV2 {
     final panelWidth = _panelWidth(safeBounds.width);
     final panelHeight = MessageOverlayMetricsV2.actionPanelHeight(actionCount);
     final reactionHeight = showReactionBar
-        ? MessageOverlayMetricsV2.reactionBarHeight
+        ? _reactionPickerHeight(reactionPickerExpanded)
+        : 0.0;
+    final reactionSideSelectionHeight = showReactionBar
+        ? _reactionPickerHeight(false)
+        : 0.0;
+    final reactionWidth = showReactionBar
+        ? _reactionPickerWidth(
+            safeBounds.width,
+            panelWidth,
+            reactionPickerExpanded,
+          )
         : 0.0;
     final aboveSpace =
         bubbleRect.top - safeBounds.top - MessageOverlayMetricsV2.gap;
@@ -49,7 +60,7 @@ class MessageOverlayLayoutV2 {
 
     final actionSide = _actionPanelSide(
       panelHeight: panelHeight,
-      reactionHeight: reactionHeight,
+      reactionHeight: reactionSideSelectionHeight,
       aboveSpace: aboveSpace,
       belowSpace: belowSpace,
       showReactionBar: showReactionBar,
@@ -73,7 +84,7 @@ class MessageOverlayLayoutV2 {
               safeBounds: safeBounds,
               isMe: isMe,
               side: reactionSide!,
-              width: panelWidth,
+              width: reactionWidth,
               height: reactionHeight,
             )
           : null,
@@ -126,6 +137,26 @@ class MessageOverlayLayoutV2 {
           math.max(MessageOverlayMetricsV2.panelMinWidth, safeWidth),
         )
         .clamp(0.0, safeWidth)
+        .toDouble();
+  }
+
+  static double _reactionPickerHeight(bool expanded) {
+    if (expanded) {
+      return MessageOverlayMetricsV2.reactionPickerExpandedHeight;
+    }
+    return MessageOverlayMetricsV2.reactionBarHeight;
+  }
+
+  static double _reactionPickerWidth(
+    double safeWidth,
+    double panelWidth,
+    bool expanded,
+  ) {
+    if (!expanded) {
+      return panelWidth;
+    }
+    return math
+        .min(MessageOverlayMetricsV2.reactionPickerExpandedWidth, safeWidth)
         .toDouble();
   }
 

@@ -8,6 +8,8 @@ class MessageOverlayMetricsV2 {
   static const double separatorHeight = 1;
   static const double gap = 10;
   static const double reactionBarHeight = 44;
+  static const double reactionPickerExpandedHeight = 250;
+  static const double reactionPickerExpandedWidth = 340;
 
   static double actionPanelHeight(int actionCount) {
     if (actionCount <= 0) {

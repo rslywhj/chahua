@@ -3,48 +3,6 @@ import 'package:flutter/cupertino.dart';
 
 import 'message_overlay_action_v2.dart';
 
-class MessageOverlayReactionBarV2 extends StatelessWidget {
-  const MessageOverlayReactionBarV2({
-    super.key,
-    required this.emojis,
-    required this.onToggleReaction,
-  });
-
-  final List<String> emojis;
-  final ValueChanged<String> onToggleReaction;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.backgroundSecondary,
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 18,
-            offset: Offset(0, 6),
-            color: Color(0x22000000),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          for (final emoji in emojis)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: const Size(0, 0),
-              onPressed: () => onToggleReaction(emoji),
-              child: Text(emoji, style: const TextStyle(fontSize: 24)),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class MessageOverlayActionPanelV2 extends StatelessWidget {
   const MessageOverlayActionPanelV2({super.key, required this.actions});
 
