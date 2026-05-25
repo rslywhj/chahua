@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:chahua/app/theme/style_config.dart';
 import 'package:chahua/core/providers/shared_preferences_provider.dart';
 import 'package:chahua/features/conversation/timeline/presentation/message_overlay/message_overlay_reaction_picker_v2.dart';
 import 'package:chahua/l10n/app_localizations.dart';
@@ -220,9 +221,32 @@ void main() {
 
     expect(decoration.boxShadow, isNull);
   });
+
+  testWidgets('empty recents label uses dark mode text color', (tester) async {
+    await _pumpWithSettings(
+      tester,
+      MessageOverlayReactionBarV2(
+        emojis: const ['👍', '❤️', '😂'],
+        onToggleReaction: (_) {},
+      ),
+      brightness: Brightness.dark,
+    );
+
+    await tester.tap(find.byIcon(CupertinoIcons.add));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final label = tester.widget<Text>(find.text('No Recents'));
+
+    expect(label.style?.color, AppColorTheme.darkDefaults.textSecondary);
+  });
 }
 
-Future<void> _pumpWithSettings(WidgetTester tester, Widget child) async {
+Future<void> _pumpWithSettings(
+  WidgetTester tester,
+  Widget child, {
+  Brightness brightness = Brightness.light,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   await tester.pumpWidget(
@@ -231,11 +255,14 @@ Future<void> _pumpWithSettings(WidgetTester tester, Widget child) async {
       child: CupertinoApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: CupertinoPageScaffold(
-          child: Center(
-            child: RepaintBoundary(
-              key: _pickerBoundaryKey,
-              child: SizedBox(width: 340, child: child),
+        home: MediaQuery(
+          data: MediaQueryData(platformBrightness: brightness),
+          child: CupertinoPageScaffold(
+            child: Center(
+              child: RepaintBoundary(
+                key: _pickerBoundaryKey,
+                child: SizedBox(width: 340, child: child),
+              ),
             ),
           ),
         ),

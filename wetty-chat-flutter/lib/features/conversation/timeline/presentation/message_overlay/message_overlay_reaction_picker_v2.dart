@@ -166,6 +166,15 @@ class _NativeEmojiPicker extends StatelessWidget {
               emojiSizeMax: 24,
               backgroundColor: colors.backgroundSecondary,
               buttonMode: ButtonMode.CUPERTINO,
+              noRecents: Text(
+                l10n?.reactionPickerNoRecents ?? '',
+                style: appTextStyle(
+                  context,
+                  color: colors.textSecondary,
+                  fontSize: 20,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
             categoryViewConfig: CategoryViewConfig(
               backgroundColor: colors.backgroundSecondary,

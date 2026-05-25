@@ -42,6 +42,7 @@
   "messageSearchFailed": "搜索消息失败",
   "messageSearchThreadContext": "在话题中",
   "messageSearchLoadMore": "加载更多",
+  "reactionPickerNoRecents": "暂无最近使用的表情",
   "noMembers": "暂无成员",
   "retry": "重试",
 

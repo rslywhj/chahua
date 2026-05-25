@@ -115,6 +115,9 @@
   "messageSearchLoadMore": "Load More",
   "@messageSearchLoadMore": { "description": "Button label for loading more message search results" },
 
+  "reactionPickerNoRecents": "No Recents",
+  "@reactionPickerNoRecents": { "description": "Empty state shown when the reaction emoji picker has no recently used emoji" },
+
   "noMembers": "No members",
   "@noMembers": { "description": "Placeholder when group has no members" },
 

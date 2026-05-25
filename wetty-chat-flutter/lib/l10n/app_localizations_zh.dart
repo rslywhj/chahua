@@ -123,6 +123,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageSearchLoadMore => '加载更多';
 
   @override
+  String get reactionPickerNoRecents => '暂无最近使用的表情';
+
+  @override
   String get noMembers => '暂无成员';
 
   @override
@@ -603,6 +606,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageSearchLoadMore => '載入更多';
+
+  @override
+  String get reactionPickerNoRecents => '暫無最近使用的表情';
 
   @override
   String get noMembers => '暫無成員';

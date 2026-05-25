@@ -123,6 +123,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get messageSearchLoadMore => 'Load More';
 
   @override
+  String get reactionPickerNoRecents => 'No Recents';
+
+  @override
   String get noMembers => 'No members';
 
   @override

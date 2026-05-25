@@ -327,6 +327,12 @@ abstract class AppLocalizations {
   /// **'Load More'**
   String get messageSearchLoadMore;
 
+  /// Empty state shown when the reaction emoji picker has no recently used emoji
+  ///
+  /// In en, this message translates to:
+  /// **'No Recents'**
+  String get reactionPickerNoRecents;
+
   /// Placeholder when group has no members
   ///
   /// In en, this message translates to:
