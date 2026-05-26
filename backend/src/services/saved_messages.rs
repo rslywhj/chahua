@@ -324,15 +324,19 @@ fn load_sticker_snapshot(
     }))
 }
 
-fn build_new_saved_message(
-    id: i64,
-    uid: i32,
-    message: &Message,
+struct SavedMessageSnapshotParts {
     attachments: Vec<SavedAttachmentSnapshot>,
     sticker: Option<SavedStickerSnapshot>,
     mentions: Vec<MentionInfo>,
     sender: SavedSenderSnapshot,
     chat: SavedChatSnapshot,
+}
+
+fn build_new_saved_message(
+    id: i64,
+    uid: i32,
+    message: &Message,
+    snapshots: SavedMessageSnapshotParts,
 ) -> Result<NewSavedMessage, AppError> {
     Ok(NewSavedMessage {
         id,
@@ -346,13 +350,14 @@ fn build_new_saved_message(
         saved_at: Utc::now(),
         snapshot_message: message.message.clone(),
         snapshot_message_type: message.message_type.clone(),
-        snapshot_attachments: snapshot_json(&attachments, "attachments")?,
-        snapshot_sticker: sticker
+        snapshot_attachments: snapshot_json(&snapshots.attachments, "attachments")?,
+        snapshot_sticker: snapshots
+            .sticker
             .map(|snapshot| snapshot_json(&snapshot, "sticker"))
             .transpose()?,
-        snapshot_mentions: snapshot_json(&mentions, "mentions")?,
-        snapshot_sender: snapshot_json(&sender, "sender")?,
-        snapshot_chat: snapshot_json(&chat, "chat")?,
+        snapshot_mentions: snapshot_json(&snapshots.mentions, "mentions")?,
+        snapshot_sender: snapshot_json(&snapshots.sender, "sender")?,
+        snapshot_chat: snapshot_json(&snapshots.chat, "chat")?,
     })
 }
 
@@ -428,11 +433,13 @@ pub async fn save_message_snapshot(
         id,
         uid,
         &message,
-        attachments,
-        sticker,
-        mentions,
-        sender,
-        chat,
+        SavedMessageSnapshotParts {
+            attachments,
+            sticker,
+            mentions,
+            sender,
+            chat,
+        },
     )?;
 
     let inserted = diesel::insert_into(saved_messages::table)
