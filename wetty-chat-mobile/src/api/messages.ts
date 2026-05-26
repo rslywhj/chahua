@@ -17,6 +17,8 @@ export interface User {
   userGroup?: UserGroupTagInfo | null;
 }
 
+export type MessageType = 'text' | 'audio' | 'file' | 'system' | 'invite' | 'sticker';
+
 export interface MessagePreviewSticker {
   emoji?: string | null;
 }
@@ -26,7 +28,7 @@ export interface MessagePreview {
   clientGeneratedId?: string | null;
   createdAt?: string | null;
   message: string | null;
-  messageType: 'text' | 'audio' | 'file' | 'system' | 'invite' | 'sticker';
+  messageType: MessageType;
   sticker?: MessagePreviewSticker | null;
   sender: User;
   isDeleted: boolean;
@@ -85,7 +87,7 @@ export interface MarkChatReadStateResponse {
 export interface MessageResponse {
   id: string;
   message: string | null;
-  messageType: 'text' | 'audio' | 'system' | 'invite' | 'sticker';
+  messageType: MessageType;
   sticker?: StickerSummary;
   replyRootId: string | null;
   clientGeneratedId: string;
