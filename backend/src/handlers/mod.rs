@@ -6,6 +6,7 @@ pub mod invites;
 pub mod members;
 pub mod pins;
 pub mod push;
+mod saved_messages;
 pub mod service_tokens;
 pub mod stickers;
 pub mod threads;
@@ -23,6 +24,7 @@ pub fn api_router() -> OpenApiRouter<AppState> {
         .nest("/group", groups::router())
         .nest("/invites", invites::router())
         .nest("/push", push::router())
+        .nest("/saved-messages", saved_messages::router())
         .nest("/external", external::router())
         .nest("/service-tokens", service_tokens::router())
         .nest("/stickers", stickers::router())

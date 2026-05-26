@@ -1,6 +1,7 @@
 mod chat_attachments;
 mod messages;
 mod reactions;
+mod saved_messages;
 
 use axum::{
     extract::{Path, Query, State},
@@ -1620,6 +1621,7 @@ pub fn router() -> OpenApiRouter<crate::AppState> {
                     "/threads/{thread_root_id}",
                     super::threads::subscribe_router(),
                 )
+                .nest("/saved-messages", self::saved_messages::router())
                 .nest("/pins", super::pins::router()),
         )
 }

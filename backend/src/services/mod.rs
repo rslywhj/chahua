@@ -8,6 +8,7 @@ pub mod invites;
 pub mod media;
 pub mod message_search;
 pub mod push;
+pub mod saved_messages;
 pub mod service_tokens;
 pub mod threads;
 pub mod unread;
