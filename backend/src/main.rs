@@ -390,8 +390,12 @@ async fn build_message_search_service(
     let service = Arc::new(services::message_search::MessageSearchService::new(
         config, metrics,
     )?);
-    service.ensure_ready().await?;
-    info!(index_uid, "Message search enabled");
+    service.ensure_healthy().await?;
+    service.start_setup_best_effort();
+    info!(
+        index_uid,
+        "Message search enabled; index setup running in background"
+    );
     Ok(Some(service))
 }
 

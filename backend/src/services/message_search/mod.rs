@@ -47,6 +47,7 @@ const DISPLAYED_ATTRIBUTES: &[&str] = &[
 ];
 const TASK_WAIT_INTERVAL: Duration = Duration::from_millis(50);
 const TASK_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const SETUP_TASK_WAIT_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Clone, Debug)]
 pub struct MessageSearchConfig {
@@ -247,8 +248,35 @@ impl MessageSearchService {
         self.client.index(&self.index_uid)
     }
 
-    pub async fn ensure_ready(&self) -> Result<(), MessageSearchError> {
+    pub async fn ensure_healthy(&self) -> Result<(), MessageSearchError> {
         self.client.health().await?;
+        Ok(())
+    }
+
+    pub async fn ensure_ready(&self) -> Result<(), MessageSearchError> {
+        self.ensure_healthy().await?;
+        self.ensure_index_and_settings().await
+    }
+
+    pub fn start_setup_best_effort(self: &Arc<Self>) {
+        let service = self.clone();
+        tokio::spawn(async move {
+            if let Err(err) = service.ensure_index_and_settings().await {
+                tracing::warn!(
+                    index_uid = service.index_uid.as_str(),
+                    ?err,
+                    "message search index setup failed"
+                );
+            } else {
+                tracing::info!(
+                    index_uid = service.index_uid.as_str(),
+                    "message search index setup completed"
+                );
+            }
+        });
+    }
+
+    async fn ensure_index_and_settings(&self) -> Result<(), MessageSearchError> {
         self.ensure_index_exists().await?;
         self.apply_settings().await?;
         Ok(())
@@ -415,7 +443,10 @@ impl MessageSearchService {
                 let primary_key = index.get_primary_key().await?.map(str::to_string);
                 match primary_key.as_deref() {
                     Some("id") => Ok(()),
-                    None => self.wait_for_task(index.set_primary_key("id").await?).await,
+                    None => {
+                        self.wait_for_setup_task(index.set_primary_key("id").await?)
+                            .await
+                    }
                     Some(_) => Err(MessageSearchError::InvalidPrimaryKey(primary_key)),
                 }
             }
@@ -424,30 +455,30 @@ impl MessageSearchService {
                     .client
                     .create_index(&self.index_uid, Some("id"))
                     .await?;
-                self.wait_for_task(task).await
+                self.wait_for_setup_task(task).await
             }
         }
     }
 
     async fn apply_settings(&self) -> Result<(), MessageSearchError> {
         let index = self.index();
-        self.wait_for_task(
+        self.wait_for_setup_task(
             index
                 .set_searchable_attributes(SEARCHABLE_ATTRIBUTES)
                 .await?,
         )
         .await?;
-        self.wait_for_task(
+        self.wait_for_setup_task(
             index
                 .set_filterable_attributes(FILTERABLE_ATTRIBUTES)
                 .await?,
         )
         .await?;
-        self.wait_for_task(index.set_sortable_attributes(SORTABLE_ATTRIBUTES).await?)
+        self.wait_for_setup_task(index.set_sortable_attributes(SORTABLE_ATTRIBUTES).await?)
             .await?;
-        self.wait_for_task(index.set_ranking_rules(RANKING_RULES).await?)
+        self.wait_for_setup_task(index.set_ranking_rules(RANKING_RULES).await?)
             .await?;
-        self.wait_for_task(index.set_displayed_attributes(DISPLAYED_ATTRIBUTES).await?)
+        self.wait_for_setup_task(index.set_displayed_attributes(DISPLAYED_ATTRIBUTES).await?)
             .await?;
         Ok(())
     }
@@ -529,12 +560,22 @@ impl MessageSearchService {
     }
 
     async fn wait_for_task(&self, task: TaskInfo) -> Result<(), MessageSearchError> {
+        self.wait_for_task_with_timeout(task, TASK_WAIT_TIMEOUT)
+            .await
+    }
+
+    async fn wait_for_setup_task(&self, task: TaskInfo) -> Result<(), MessageSearchError> {
+        self.wait_for_task_with_timeout(task, SETUP_TASK_WAIT_TIMEOUT)
+            .await
+    }
+
+    async fn wait_for_task_with_timeout(
+        &self,
+        task: TaskInfo,
+        timeout: Duration,
+    ) -> Result<(), MessageSearchError> {
         let task = task
-            .wait_for_completion(
-                &self.client,
-                Some(TASK_WAIT_INTERVAL),
-                Some(TASK_WAIT_TIMEOUT),
-            )
+            .wait_for_completion(&self.client, Some(TASK_WAIT_INTERVAL), Some(timeout))
             .await?;
         ensure_task_success(task)
     }
@@ -763,7 +804,8 @@ mod tests {
 
     use super::{
         filter_authoritative_hits_with_counts, normalize_search_text, project_message_document,
-        validate_search_query, SearchHitCandidate, RANKING_RULES,
+        validate_search_query, SearchHitCandidate, RANKING_RULES, SETUP_TASK_WAIT_TIMEOUT,
+        TASK_WAIT_TIMEOUT,
     };
 
     fn message(id: i64, text: Option<&str>) -> Message {
@@ -812,6 +854,11 @@ mod tests {
         assert!(RANKING_RULES.contains(&"words"));
         assert!(RANKING_RULES.contains(&"attributeRank"));
         assert!(RANKING_RULES.contains(&"wordPosition"));
+    }
+
+    #[test]
+    fn setup_task_timeout_is_longer_than_live_index_timeout() {
+        assert!(SETUP_TASK_WAIT_TIMEOUT > TASK_WAIT_TIMEOUT);
     }
 
     #[test]
