@@ -573,6 +573,48 @@ pub struct NewPinnedMessage {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Queryable, Selectable, Serialize)]
+#[diesel(table_name = schema::saved_messages)]
+pub struct SavedMessage {
+    pub id: i64,
+    pub uid: i32,
+    pub original_chat_id: i64,
+    pub original_thread_root_id: Option<i64>,
+    pub original_message_id: i64,
+    pub original_reply_to_message_id: Option<i64>,
+    pub original_sender_uid: i32,
+    pub original_created_at: DateTime<Utc>,
+    pub saved_at: DateTime<Utc>,
+    pub snapshot_message: Option<String>,
+    pub snapshot_message_type: MessageType,
+    pub snapshot_attachments: serde_json::Value,
+    pub snapshot_sticker: Option<serde_json::Value>,
+    pub snapshot_mentions: serde_json::Value,
+    pub snapshot_sender: serde_json::Value,
+    pub snapshot_chat: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = schema::saved_messages)]
+pub struct NewSavedMessage {
+    pub id: i64,
+    pub uid: i32,
+    pub original_chat_id: i64,
+    pub original_thread_root_id: Option<i64>,
+    pub original_message_id: i64,
+    pub original_reply_to_message_id: Option<i64>,
+    pub original_sender_uid: i32,
+    pub original_created_at: DateTime<Utc>,
+    pub saved_at: DateTime<Utc>,
+    pub snapshot_message: Option<String>,
+    pub snapshot_message_type: MessageType,
+    pub snapshot_attachments: serde_json::Value,
+    pub snapshot_sticker: Option<serde_json::Value>,
+    pub snapshot_mentions: serde_json::Value,
+    pub snapshot_sender: serde_json::Value,
+    pub snapshot_chat: serde_json::Value,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MessageType, TranscodeStatus};

@@ -273,6 +273,30 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageType;
+
+    saved_messages (id) {
+        id -> Int8,
+        uid -> Int4,
+        original_chat_id -> Int8,
+        original_thread_root_id -> Nullable<Int8>,
+        original_message_id -> Int8,
+        original_reply_to_message_id -> Nullable<Int8>,
+        original_sender_uid -> Int4,
+        original_created_at -> Timestamptz,
+        saved_at -> Timestamptz,
+        snapshot_message -> Nullable<Text>,
+        snapshot_message_type -> MessageType,
+        snapshot_attachments -> Jsonb,
+        snapshot_sticker -> Nullable<Jsonb>,
+        snapshot_mentions -> Jsonb,
+        snapshot_sender -> Jsonb,
+        snapshot_chat -> Jsonb,
+    }
+}
+
+diesel::table! {
     service_tokens (id) {
         id -> Int8,
         token -> Text,
@@ -384,6 +408,7 @@ diesel::joinable!(pinned_messages -> groups (chat_id));
 diesel::joinable!(pinned_messages -> messages (message_id));
 diesel::joinable!(policy_assignments -> policies (policy_id));
 diesel::joinable!(policy_permissions -> policies (policy_id));
+diesel::joinable!(saved_messages -> groups (original_chat_id));
 diesel::joinable!(sticker_pack_stickers -> sticker_packs (pack_id));
 diesel::joinable!(sticker_pack_stickers -> stickers (sticker_id));
 diesel::joinable!(stickers -> media (media_id));
@@ -409,6 +434,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     policy_assignments,
     policy_permissions,
     push_subscriptions,
+    saved_messages,
     service_tokens,
     sticker_pack_stickers,
     sticker_packs,
