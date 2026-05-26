@@ -24,6 +24,19 @@ pub const REINDEX_BATCH_SIZE: i64 = 500;
 const SEARCHABLE_ATTRIBUTES: &[&str] = &["text"];
 const FILTERABLE_ATTRIBUTES: &[&str] = &["chatId"];
 const SORTABLE_ATTRIBUTES: &[&str] = &["createdAtMillis"];
+const RANKING_RULES: &[&str] = &[
+    // `sort` is ignored for relevance searches that do not pass a sort parameter,
+    // but should dominate when the user explicitly asks for newest results.
+    "sort",
+    "words",
+    "typo",
+    "proximity",
+    "attributeRank",
+    "wordPosition",
+    "exactness",
+    // Default relevance search should use recency only after text relevance ties.
+    "createdAtMillis:desc",
+];
 const DISPLAYED_ATTRIBUTES: &[&str] = &[
     "id",
     "messageId",
@@ -432,6 +445,8 @@ impl MessageSearchService {
         .await?;
         self.wait_for_task(index.set_sortable_attributes(SORTABLE_ATTRIBUTES).await?)
             .await?;
+        self.wait_for_task(index.set_ranking_rules(RANKING_RULES).await?)
+            .await?;
         self.wait_for_task(index.set_displayed_attributes(DISPLAYED_ATTRIBUTES).await?)
             .await?;
         Ok(())
@@ -748,7 +763,7 @@ mod tests {
 
     use super::{
         filter_authoritative_hits_with_counts, normalize_search_text, project_message_document,
-        validate_search_query, SearchHitCandidate,
+        validate_search_query, SearchHitCandidate, RANKING_RULES,
     };
 
     fn message(id: i64, text: Option<&str>) -> Message {
@@ -788,6 +803,15 @@ mod tests {
     fn query_validation_rejects_one_character_and_accepts_two_cjk_characters() {
         assert!(validate_search_query("你").is_err());
         assert_eq!(validate_search_query("你好").unwrap(), "你好");
+    }
+
+    #[test]
+    fn ranking_rules_support_newest_sort_and_relevance_recency_tiebreaker() {
+        assert_eq!(RANKING_RULES.first().copied(), Some("sort"));
+        assert_eq!(RANKING_RULES.last().copied(), Some("createdAtMillis:desc"));
+        assert!(RANKING_RULES.contains(&"words"));
+        assert!(RANKING_RULES.contains(&"attributeRank"));
+        assert!(RANKING_RULES.contains(&"wordPosition"));
     }
 
     #[test]
