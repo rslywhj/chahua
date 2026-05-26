@@ -25,6 +25,12 @@ Use Ionic Components when applicable, only when native ionic component can't fit
 - Do not create huge monolitic page components that becomes a maintance nightmare
 - Use Ionic component when it fits, avoid reinventing the wheel and keep style consistent
 
+## Feature Gating
+
+- New user-visible features should have an explicit flag in `src/features.ts`.
+- Gate every frontend entry point for the feature, including buttons, menu items, message actions, routes, and desktop modal branches.
+- Prefer default-enabled gates for completed features and default-disabled gates for staged rollout or internal-only features.
+
 ## Lint
 
 After making changes, run `npm run verify` and ensure it passes.

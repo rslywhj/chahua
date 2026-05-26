@@ -139,6 +139,7 @@ import {
 } from '@/store/settingsSlice';
 import { MAX_REACTIONS_PER_USER_PER_MESSAGE } from '@/constants/emojiAndStickers';
 import { saveMessage } from '@/api/savedMessages';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
 
 function generateClientId(): string {
   return `cg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -234,6 +235,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
   const wsConnected = useSelector((state: RootState) => state.connection.wsConnected);
   const isDesktop = useIsDesktop();
   const hasPointerDevice = useMouseDetected();
+  const savedMessagesEnabled = useFeatureGate('savedMessages');
   const cachedMeta = useSelector((state: RootState) => selectChatMeta(state, chatId));
   const { role: myRole } = useChatRole(chatId);
   const isAdmin = myRole === 'admin';
@@ -1681,7 +1683,8 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
     const audioMessage = isAudioMessage(msg);
     const stickerMessage = msg.messageType === 'sticker';
     const isOwn = msg.sender.uid === currentUserId;
-    const canSaveMessage = !msg.isDeleted && msg.messageType !== 'system' && !msg.id.startsWith('cg_');
+    const canSaveMessage =
+      savedMessagesEnabled && !msg.isDeleted && msg.messageType !== 'system' && !msg.id.startsWith('cg_');
     const actions: MessageOverlayAction[] = [];
 
     if (!audioMessage && !stickerMessage) {
@@ -1861,6 +1864,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
     showToast,
     presentAlert,
     startEditingMessage,
+    savedMessagesEnabled,
   ]);
 
   const renderRow = useCallback(

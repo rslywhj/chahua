@@ -159,12 +159,14 @@ export function SettingsCore({ backAction, onOpenGeneral, onOpenSavedMessages, o
               <Trans>General</Trans>
             </IonLabel>
           </IonItem>
-          <IonItem button detail={true} onClick={handleOpenSavedMessages}>
-            <IonIcon aria-hidden="true" icon={bookmarkOutline} slot="start" color="medium" />
-            <IonLabel>
-              <Trans>Saved Messages</Trans>
-            </IonLabel>
-          </IonItem>
+          <FeatureGate feature="savedMessages">
+            <IonItem button detail={true} onClick={handleOpenSavedMessages}>
+              <IonIcon aria-hidden="true" icon={bookmarkOutline} slot="start" color="medium" />
+              <IonLabel>
+                <Trans>Saved Messages</Trans>
+              </IonLabel>
+            </IonItem>
+          </FeatureGate>
           <IonItem button detail={true} onClick={handleOpenStickers}>
             <IonIcon aria-hidden="true" icon={happyOutline} slot="start" color="medium" />
             <IonLabel>

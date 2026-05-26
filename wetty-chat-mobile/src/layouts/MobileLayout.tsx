@@ -73,7 +73,10 @@ const MobileLayout: React.FC = () => {
         <Route path="/chats/join/:inviteCode" exact component={InvitePreviewPage} />
         <Route path="/chats/chat/:id" exact component={ChatThreadPage} />
         <Route path="/chats/chat/:id/thread/:threadId" exact component={ChatThreadPage} />
-        <Route path="/chats/chat/:id/group-info/saved-messages" exact component={GroupSavedMessagesPage} />
+        {whenFeature(
+          'savedMessages',
+          <Route path="/chats/chat/:id/group-info/saved-messages" exact component={GroupSavedMessagesPage} />,
+        )}
         <Route path="/chats/chat/:id/group-info/settings" exact component={GroupSettingsPage} />
         <Route path="/chats/chat/:id/group-info" exact component={GroupInfoPage} />
         <Route path="/chats/chat/:id/invites" exact component={ChatInvitesPage} />
@@ -82,7 +85,7 @@ const MobileLayout: React.FC = () => {
         <Route path="/demo" exact component={ComponentDemoPage} />
         <Route path="/settings/general" exact component={GeneralSettingsPage} />
         <Route path="/settings/language" exact component={LanguagePage} />
-        <Route path="/settings/saved-messages" exact component={SavedMessagesPage} />
+        {whenFeature('savedMessages', <Route path="/settings/saved-messages" exact component={SavedMessagesPage} />)}
         <Route path="/settings/stickers/:packId" exact component={StickerPackDetailPage} />
         <Route path="/settings/stickers" exact component={StickerSettingsPage} />
         <Route path="/settings" exact component={SettingsPage} />

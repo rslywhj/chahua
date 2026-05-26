@@ -25,6 +25,7 @@ import type { ChatThreadRouteState } from '@/types/chatThreadNavigation';
 import styles from './DesktopSplitLayout.module.scss';
 import { HeaderActionMenu, type HeaderActionMenuItem } from '@/components/HeaderActionMenu';
 import { useHasGlobalPermission } from '@/hooks/useHasGlobalPermission';
+import { useFeatureGate } from '@/hooks/useFeatureGate';
 import type { RootState } from '@/store';
 
 type DesktopRouteState = ChatThreadRouteState;
@@ -195,6 +196,7 @@ export function DesktopSplitLayout() {
   const history = useHistory();
   const location = useLocation<DesktopRouteState | undefined>();
   const canCreateChat = useHasGlobalPermission('chat.create');
+  const savedMessagesEnabled = useFeatureGate('savedMessages');
   const currentUser = useSelector((state: RootState) => state.user);
   const skipNextGlobalSettingsDismiss = useRef(false);
   const headerActions: HeaderActionMenuItem[] = [
@@ -221,7 +223,7 @@ export function DesktopSplitLayout() {
     archivedMatch,
     threadMatch,
     groupInfoMatch,
-    groupInfoSavedMessagesMatch,
+    groupInfoSavedMessagesMatch: routeGroupInfoSavedMessagesMatch,
     groupInfoSettingsMatch,
     membersMatch,
     invitesMatch,
@@ -229,6 +231,9 @@ export function DesktopSplitLayout() {
     isNewChat,
     isJoinChat,
   } = baseRoute;
+  const groupInfoSavedMessagesMatch = savedMessagesEnabled ? routeGroupInfoSavedMessagesMatch : null;
+  const disabledGroupSavedMessagesChatId = savedMessagesEnabled ? null : routeGroupInfoSavedMessagesMatch?.id;
+  const disabledSavedMessagesSettings = !savedMessagesEnabled && currentRoute.savedMessagesSettings;
   const globalSettingsOpen = currentRoute.globalSettings;
   const initialArchivedTab: ChatListTab | null =
     archivedMatch?.tab === 'threads' || archivedMatch?.tab === 'groups' || archivedMatch?.tab === 'all'
@@ -246,6 +251,20 @@ export function DesktopSplitLayout() {
     : groupInfoSettingsMatch
       ? '/chats/chat/:id/group-info/settings'
       : '/chats/chat/:id/group-info';
+
+  useEffect(() => {
+    if (disabledSavedMessagesSettings) {
+      history.replace({
+        pathname: '/settings',
+        state: { backgroundPath },
+      });
+      return;
+    }
+
+    if (disabledGroupSavedMessagesChatId) {
+      history.replace(`/chats/chat/${disabledGroupSavedMessagesChatId}/group-info`);
+    }
+  }, [backgroundPath, disabledGroupSavedMessagesChatId, disabledSavedMessagesSettings, history]);
 
   useEffect(() => {
     if (archivedMatch) {
@@ -303,11 +322,15 @@ export function DesktopSplitLayout() {
   }, [backgroundPath, history]);
 
   const openSavedMessages = useCallback(() => {
+    if (!savedMessagesEnabled) {
+      return;
+    }
+
     history.push({
       pathname: '/settings/saved-messages',
       state: { backgroundPath },
     });
-  }, [backgroundPath, history]);
+  }, [backgroundPath, history, savedMessagesEnabled]);
 
   const openStickerSettings = useCallback(() => {
     history.push({
@@ -483,7 +506,7 @@ export function DesktopSplitLayout() {
               }}
               onOpenPack={openStickerPackSettings}
             />
-          ) : currentRoute.savedMessagesSettings ? (
+          ) : savedMessagesEnabled && currentRoute.savedMessagesSettings ? (
             <SavedMessagesCore
               backAction={{
                 type: 'callback',
@@ -510,7 +533,7 @@ export function DesktopSplitLayout() {
             <SettingsCore
               backAction={{ type: 'close', onClose: closeGlobalSettings }}
               onOpenGeneral={openGeneralSettings}
-              onOpenSavedMessages={openSavedMessages}
+              onOpenSavedMessages={savedMessagesEnabled ? openSavedMessages : undefined}
               onOpenStickers={openStickerSettings}
             />
           )}

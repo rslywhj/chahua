@@ -23,6 +23,10 @@ export const FEATURES = {
     enabled: true,
     description: 'Shows chat-scoped message search from the group info page.',
   },
+  savedMessages: {
+    enabled: true,
+    description: 'Allows users to save messages and view saved messages from settings or group info.',
+  },
   landingInviteModal: {
     enabled: true,
     description: 'Shows invite preview and redeem modal on the install landing page.',

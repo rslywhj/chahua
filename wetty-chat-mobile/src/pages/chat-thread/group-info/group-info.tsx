@@ -90,9 +90,11 @@ function GroupInfoContent({
           </GroupSettingsActionButton>
         </FeatureGate>
 
-        <GroupSettingsActionButton icon={bookmarkOutline} onClick={onOpenSavedMessages}>
-          <Trans>Saved</Trans>
-        </GroupSettingsActionButton>
+        <FeatureGate feature="savedMessages">
+          <GroupSettingsActionButton icon={bookmarkOutline} onClick={onOpenSavedMessages}>
+            <Trans>Saved</Trans>
+          </GroupSettingsActionButton>
+        </FeatureGate>
 
         <ChatMuteSettingItem chatId={chatId} mutedUntil={mutedUntil} archived={archived} />
 
