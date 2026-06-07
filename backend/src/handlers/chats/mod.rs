@@ -342,6 +342,43 @@ fn first_attachment_kind(
         .map(|attachment| attachment.kind.clone())
 }
 
+#[cfg(test)]
+pub(crate) fn message_is_visible_in_thread_scope(message: &Message, thread_root_id: i64) -> bool {
+    if !message.is_published {
+        return false;
+    }
+
+    if message.id == thread_root_id {
+        return message.reply_root_id.is_none() && message.has_thread;
+    }
+
+    message.reply_root_id == Some(thread_root_id) && message.deleted_at.is_none()
+}
+
+pub(crate) fn redact_deleted_message_preview(preview: &mut MessagePreview) {
+    if !preview.is_deleted {
+        return;
+    }
+
+    preview.message = None;
+    preview.sticker = None;
+    preview.first_attachment_kind = None;
+    preview.mentions.clear();
+}
+
+pub(crate) fn redact_deleted_message_response(response: &mut MessageResponse) {
+    if !response.is_deleted {
+        return;
+    }
+
+    response.message = None;
+    response.sticker = None;
+    response.has_attachments = false;
+    response.attachments.clear();
+    response.reactions.clear();
+    response.mentions.clear();
+}
+
 fn sticker_preview_text(emoji: Option<&str>) -> String {
     match emoji.filter(|value| !value.trim().is_empty()) {
         Some(emoji) => format!("[Sticker] {emoji}"),
@@ -709,7 +746,6 @@ pub async fn attach_metadata(
         .filter_map(|m| m.reply_to_id)
         .collect();
 
-    let message_ids: Vec<i64> = messages_to_process.iter().map(|m| m.id).collect();
     let reply_messages_map = load_reply_messages(conn, &reply_ids).unwrap_or_default();
 
     let mut avatar_uids = std::collections::HashSet::new();
@@ -725,9 +761,10 @@ pub async fn attach_metadata(
 
     let mut message_attachments_map: std::collections::HashMap<i64, Vec<Attachment>> =
         std::collections::HashMap::new();
-    let attachment_message_ids: Vec<i64> = message_ids
+    let attachment_message_ids: Vec<i64> = messages_to_process
         .iter()
-        .copied()
+        .filter(|message| message.deleted_at.is_none())
+        .map(|message| message.id)
         .chain(reply_ids.iter().copied())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
@@ -736,6 +773,7 @@ pub async fn attach_metadata(
         use crate::schema::attachments::dsl as a_dsl;
         let attachments: Vec<Attachment> = match attachments::table
             .filter(a_dsl::message_id.eq_any(&attachment_message_ids))
+            .filter(a_dsl::deleted_at.is_null())
             .order((a_dsl::message_id.asc(), a_dsl::order.asc(), a_dsl::id.asc()))
             .select(Attachment::as_select())
             .load(conn)
@@ -759,6 +797,7 @@ pub async fn attach_metadata(
 
     let sticker_ids: Vec<i64> = messages_to_process
         .iter()
+        .filter(|m| m.deleted_at.is_none())
         .filter_map(|m| m.sticker_id)
         .chain(
             reply_messages_map
@@ -926,7 +965,8 @@ pub async fn attach_metadata(
     for (idx, m) in messages_to_process.into_iter().enumerate() {
         let reply_to_message = m.reply_to_id.and_then(|reply_id| {
             reply_messages_map.get(&reply_id).map(|reply_msg| {
-                if reply_msg.has_attachments
+                if reply_msg.deleted_at.is_none()
+                    && reply_msg.has_attachments
                     && message_attachments_map
                         .get(&reply_msg.id)
                         .is_none_or(|attachments| attachments.is_empty())
@@ -939,7 +979,7 @@ pub async fn attach_metadata(
                     );
                 }
 
-                Box::new(MessagePreview {
+                let mut preview = MessagePreview {
                     id: reply_msg.id,
                     client_generated_id: reply_msg.client_generated_id.clone(),
                     created_at: reply_msg.created_at,
@@ -975,42 +1015,47 @@ pub async fn attach_metadata(
                                 .collect()
                         })
                         .unwrap_or_default(),
-                })
+                };
+                redact_deleted_message_preview(&mut preview);
+                Box::new(preview)
             })
         });
 
         let mut attachments = Vec::new();
-        if let Some(atts) = message_attachments_map.get(&m.id) {
-            for att in atts {
-                attachments.push(AttachmentResponse {
-                    id: att.id,
-                    url: build_public_object_url(state, &att.external_reference),
-                    kind: att.kind.clone(),
-                    size: att.size,
-                    file_name: att.file_name.clone(),
-                    width: att.width,
-                    height: att.height,
-                });
+        if m.deleted_at.is_none() {
+            if let Some(atts) = message_attachments_map.get(&m.id) {
+                for att in atts {
+                    attachments.push(AttachmentResponse {
+                        id: att.id,
+                        url: build_public_object_url(state, &att.external_reference),
+                        kind: att.kind.clone(),
+                        size: att.size,
+                        file_name: att.file_name.clone(),
+                        width: att.width,
+                        height: att.height,
+                    });
+                }
             }
         }
 
-        responses.push(MessageResponse {
+        let is_deleted = m.deleted_at.is_some();
+        let mut response = MessageResponse {
             id: m.id,
-            message: if m.deleted_at.is_some() {
-                None
-            } else {
-                m.message
-            },
+            message: if is_deleted { None } else { m.message },
             message_type: m.message_type,
             sticker: m.sticker_id.and_then(|sticker_id| {
-                sticker_rows.get(&sticker_id).map(|(sticker, media_row)| {
-                    build_message_sticker_response(
-                        state,
-                        sticker,
-                        media_row,
-                        favorited_sticker_ids.contains(&sticker_id),
-                    )
-                })
+                (!is_deleted)
+                    .then(|| {
+                        sticker_rows.get(&sticker_id).map(|(sticker, media_row)| {
+                            build_message_sticker_response(
+                                state,
+                                sticker,
+                                media_row,
+                                favorited_sticker_ids.contains(&sticker_id),
+                            )
+                        })
+                    })
+                    .flatten()
             }),
             reply_root_id: m.reply_root_id,
             client_generated_id: m.client_generated_id,
@@ -1018,8 +1063,8 @@ pub async fn attach_metadata(
             chat_id: m.chat_id,
             created_at: m.created_at,
             is_edited: m.updated_at.is_some(),
-            is_deleted: m.deleted_at.is_some(),
-            has_attachments: m.has_attachments,
+            is_deleted,
+            has_attachments: !is_deleted && m.has_attachments,
             thread_info: if m.has_thread {
                 Some(ThreadInfo {
                     reply_count: *thread_counts_map.get(&m.id).unwrap_or(&0),
@@ -1029,14 +1074,20 @@ pub async fn attach_metadata(
             },
             reply_to_message,
             attachments,
-            reactions: reaction_summaries_map.remove(&m.id).unwrap_or_default(),
+            reactions: if is_deleted {
+                Vec::new()
+            } else {
+                reaction_summaries_map.remove(&m.id).unwrap_or_default()
+            },
             mentions: {
                 per_message_mentions[idx]
                     .iter()
                     .map(|&uid| build_mention_info(uid, &user_avatars, &user_profiles))
                     .collect()
             },
-        });
+        };
+        redact_deleted_message_response(&mut response);
+        responses.push(response);
     }
     responses
 }
@@ -1673,16 +1724,86 @@ pub fn router() -> OpenApiRouter<crate::AppState> {
 mod tests {
     use super::{
         attachment_preview_text, build_push_preview_bundle, extract_mention_uids,
-        first_attachment_kind, render_mentions_as_text, sticker_preview_text, MentionInfo,
-        MessagePreview, PreparedMessageSend,
+        first_attachment_kind, message_is_visible_in_thread_scope, redact_deleted_message_preview,
+        redact_deleted_message_response, render_mentions_as_text, sticker_preview_text,
+        MentionInfo, MessagePreview, MessageResponse, MessageStickerResponse, PreparedMessageSend,
+        ReactionSummary, StickerMediaResponse,
     };
     use crate::{
         dto::{attachments::AttachmentResponse, users::User},
         models::{Attachment, Message, MessageType, TranscodeStatus},
     };
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
     use serde_json::json;
     use std::collections::HashMap;
+
+    fn message(id: i64, patch: impl FnOnce(&mut Message)) -> Message {
+        let mut message = Message {
+            id,
+            message: Some(format!("message {id}")),
+            message_type: MessageType::Text,
+            reply_to_id: None,
+            reply_root_id: None,
+            client_generated_id: format!("client-{id}"),
+            sender_uid: 7,
+            chat_id: 10,
+            created_at: Utc
+                .timestamp_millis_opt(1_700_000_000_000 + id)
+                .single()
+                .unwrap(),
+            updated_at: None,
+            deleted_at: None,
+            has_attachments: false,
+            has_thread: false,
+            has_reactions: false,
+            sticker_id: None,
+            is_published: true,
+            transcode_status: TranscodeStatus::None,
+        };
+        patch(&mut message);
+        message
+    }
+
+    fn sender() -> User {
+        User {
+            uid: 7,
+            avatar_url: None,
+            name: Some("Alice".to_string()),
+            gender: 0,
+            user_group: None,
+        }
+    }
+
+    fn attachment_response() -> AttachmentResponse {
+        AttachmentResponse {
+            id: 1,
+            url: "https://example.com/secret.png".to_string(),
+            kind: "image/png".to_string(),
+            size: 123,
+            file_name: "secret.png".to_string(),
+            width: Some(100),
+            height: Some(100),
+        }
+    }
+
+    fn sticker_response() -> MessageStickerResponse {
+        MessageStickerResponse {
+            id: 1,
+            emoji: "🙂".to_string(),
+            name: Some("smile".to_string()),
+            description: None,
+            created_at: Utc::now(),
+            is_favorited: false,
+            media: StickerMediaResponse {
+                id: 2,
+                url: "https://example.com/sticker.webp".to_string(),
+                content_type: "image/webp".to_string(),
+                size: 456,
+                width: Some(128),
+                height: Some(128),
+            },
+        }
+    }
 
     #[test]
     fn sticker_preview_text_includes_emoji_when_available() {
@@ -1987,5 +2108,119 @@ mod tests {
             first_attachment_kind(&attachments_map, 42),
             Some("image/png".to_string())
         );
+    }
+
+    #[test]
+    fn thread_scope_visibility_allows_only_deleted_root_shell_exception() {
+        let root_id = 10;
+        let deleted_root = message(root_id, |message| {
+            message.deleted_at = Some(Utc::now());
+            message.has_thread = true;
+        });
+        let deleted_reply = message(11, |message| {
+            message.reply_root_id = Some(root_id);
+            message.deleted_at = Some(Utc::now());
+        });
+        let deleted_non_root = message(12, |message| {
+            message.deleted_at = Some(Utc::now());
+        });
+        let visible_reply = message(13, |message| {
+            message.reply_root_id = Some(root_id);
+        });
+
+        assert!(message_is_visible_in_thread_scope(&deleted_root, root_id));
+        assert!(!message_is_visible_in_thread_scope(&deleted_reply, root_id));
+        assert!(!message_is_visible_in_thread_scope(
+            &deleted_non_root,
+            root_id
+        ));
+        assert!(message_is_visible_in_thread_scope(&visible_reply, root_id));
+    }
+
+    #[test]
+    fn deleted_message_response_redaction_preserves_metadata_only() {
+        let mut response = MessageResponse {
+            id: 10,
+            message: Some("secret root".to_string()),
+            message_type: MessageType::Text,
+            sticker: Some(sticker_response()),
+            reply_root_id: None,
+            client_generated_id: "client-10".to_string(),
+            sender: sender(),
+            chat_id: 1,
+            created_at: Utc::now(),
+            is_edited: true,
+            is_deleted: true,
+            has_attachments: true,
+            thread_info: Some(super::ThreadInfo { reply_count: 2 }),
+            reply_to_message: None,
+            attachments: vec![attachment_response()],
+            reactions: vec![ReactionSummary {
+                emoji: "👍".to_string(),
+                count: 1,
+                reacted_by_me: Some(true),
+                reactors: None,
+            }],
+            mentions: vec![MentionInfo {
+                uid: 9,
+                username: Some("Mentioned".to_string()),
+                avatar_url: None,
+                gender: 0,
+                user_group: None,
+            }],
+        };
+
+        redact_deleted_message_response(&mut response);
+
+        assert_eq!(response.id, 10);
+        assert_eq!(response.client_generated_id, "client-10");
+        assert_eq!(response.sender.uid, 7);
+        assert!(response.is_edited);
+        assert!(response.is_deleted);
+        assert_eq!(
+            response.thread_info.as_ref().map(|info| info.reply_count),
+            Some(2)
+        );
+        assert_eq!(response.message, None);
+        assert!(response.sticker.is_none());
+        assert!(!response.has_attachments);
+        assert!(response.attachments.is_empty());
+        assert!(response.reactions.is_empty());
+        assert!(response.mentions.is_empty());
+    }
+
+    #[test]
+    fn deleted_message_preview_redaction_preserves_metadata_only() {
+        let mut preview = MessagePreview {
+            id: 10,
+            client_generated_id: "client-10".to_string(),
+            created_at: Utc::now(),
+            sender: sender(),
+            message: Some("secret root".to_string()),
+            message_type: MessageType::Text,
+            sticker: Some(super::MessagePreviewSticker {
+                emoji: "🙂".to_string(),
+            }),
+            first_attachment_kind: Some("image/png".to_string()),
+            is_deleted: true,
+            mentions: vec![MentionInfo {
+                uid: 9,
+                username: Some("Mentioned".to_string()),
+                avatar_url: None,
+                gender: 0,
+                user_group: None,
+            }],
+        };
+
+        redact_deleted_message_preview(&mut preview);
+
+        assert_eq!(preview.id, 10);
+        assert_eq!(preview.client_generated_id, "client-10");
+        assert_eq!(preview.sender.uid, 7);
+        assert!(preview.is_deleted);
+        assert_eq!(preview.message, None);
+        assert!(preview.sticker.is_none());
+        assert!(preview.first_attachment_kind.is_none());
+        assert!(preview.mentions.is_empty());
     }
 }

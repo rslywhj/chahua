@@ -190,16 +190,22 @@ async fn get_messages(
     let q_thread_id = q.thread_id;
     macro_rules! base_query {
         () => {{
-            let mut b = messages::table.into_boxed().filter(
-                dsl::chat_id
-                    .eq(chat_id)
-                    .and(dsl::deleted_at.is_null())
-                    .and(dsl::is_published.eq(true)),
-            );
+            let mut b = messages::table
+                .into_boxed()
+                .filter(dsl::chat_id.eq(chat_id).and(dsl::is_published.eq(true)));
             if let Some(tid) = q_thread_id {
-                b = b.filter(dsl::reply_root_id.eq(tid).or(dsl::id.eq(tid)));
+                b = b.filter(
+                    dsl::reply_root_id
+                        .eq(tid)
+                        .and(dsl::deleted_at.is_null())
+                        .or(dsl::id.eq(tid)),
+                );
             } else {
-                b = b.filter(dsl::reply_root_id.is_null());
+                b = b.filter(
+                    dsl::reply_root_id
+                        .is_null()
+                        .and(dsl::deleted_at.is_null().or(dsl::has_thread.eq(true))),
+                );
             }
             b
         }};
