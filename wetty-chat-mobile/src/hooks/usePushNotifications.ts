@@ -1,19 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '@/api/client';
-
-// Helper to convert base64 to Uint8Array for Web Push manager
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import { base64UrlToUint8Array, toBase64Url } from '@/utils/base64url';
 
 export type PushNotificationErrorCode =
   | 'unsupported_browser'
@@ -54,11 +41,9 @@ function checkPushSupport(): PushNotificationResult {
 }
 
 function encodeSubscriptionKeys(subscription: PushSubscription) {
-  const p256dh = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(subscription.getKey('p256dh')!))));
-  const auth = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(subscription.getKey('auth')!))));
   return {
-    p256dh: p256dh.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
-    auth: auth.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    p256dh: toBase64Url(new Uint8Array(subscription.getKey('p256dh')!)),
+    auth: toBase64Url(new Uint8Array(subscription.getKey('auth')!)),
   };
 }
 
@@ -82,7 +67,7 @@ async function ensurePushSubscription(registration: ServiceWorkerRegistration) {
   }
 
   const vapidRes = await apiClient.get('/push/vapid-public-key');
-  const publicKey = urlBase64ToUint8Array(vapidRes.data.publicKey);
+  const publicKey = base64UrlToUint8Array(vapidRes.data.publicKey);
   const newSubscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: publicKey,

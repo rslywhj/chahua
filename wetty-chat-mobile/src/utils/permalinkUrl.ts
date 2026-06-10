@@ -1,3 +1,5 @@
+import { base64UrlToUint8Array, toBase64Url } from '@/utils/base64url';
+
 const PERMALINK_PATH_PREFIX = '/m/';
 
 /**
@@ -11,13 +13,7 @@ export function encodePermalink(chatId: string, messageId: string): string {
   view.setBigUint64(0, BigInt(chatId));
   view.setBigUint64(8, BigInt(messageId));
 
-  let binary = '';
-  const bytes = new Uint8Array(buf);
-  for (const b of bytes) {
-    binary += String.fromCharCode(b);
-  }
-
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return toBase64Url(new Uint8Array(buf));
 }
 
 export function decodePermalink(encoded: string): { chatId: string; messageId: string } {
@@ -25,22 +21,12 @@ export function decodePermalink(encoded: string): { chatId: string; messageId: s
     throw new Error('Missing permalink segment');
   }
 
-  // Restore standard base64
-  let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-  while (b64.length % 4 !== 0) b64 += '=';
-
-  const binary = atob(b64);
-  if (binary.length !== 16) {
-    throw new Error(`Invalid permalink payload length: ${binary.length}`);
+  const bytes = base64UrlToUint8Array(encoded);
+  if (bytes.length !== 16) {
+    throw new Error(`Invalid permalink payload length: ${bytes.length}`);
   }
 
-  const buf = new ArrayBuffer(16);
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  const view = new DataView(buf);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const chatId = view.getBigUint64(0).toString();
   const messageId = view.getBigUint64(8).toString();
 

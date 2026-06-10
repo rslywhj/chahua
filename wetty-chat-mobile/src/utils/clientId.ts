@@ -1,4 +1,5 @@
 import { kvGet, kvSet } from './db';
+import { fromBase64Url } from './base64url';
 
 let cachedClientId: string | null = null;
 
@@ -19,7 +20,7 @@ function extractCidFromJwt(token: string): string | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const payload = JSON.parse(fromBase64Url(parts[1]));
     return typeof payload.cid === 'string' && payload.cid.length > 0 ? payload.cid : null;
   } catch {
     return null;
