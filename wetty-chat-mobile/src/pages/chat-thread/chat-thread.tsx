@@ -4,7 +4,6 @@ import { useHistory, useLocation, useParams } from 'react-router-dom';
 import { chevronDown } from 'ionicons/icons';
 import { useSelector } from 'react-redux';
 import { getMessage, type MessageResponse, type User } from '@/api/messages';
-import type { RootState } from '@/store/index';
 import { selectCurrentUser } from '@/store/userSlice';
 import { ChatVirtualScroll } from '@/components/chat/virtualScroll/ChatVirtualScroll';
 import type { ChatRow } from '@/components/chat/virtualScroll/types';
@@ -53,8 +52,6 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
   // Global states
   const locale = useSelector(selectEffectiveLocale);
   const currentUser = useSelector(selectCurrentUser);
-  const wsConnected = useSelector((state: RootState) => state.connection.wsConnected);
-
   const storeChatId = threadId ? `${chatId}_thread_${threadId}` : chatId;
 
   // Parsed from #msg=, read only, parsed once on mount
@@ -425,14 +422,12 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
       <div className="ion-page chat-thread-page" style={pageStyle}>
         <ChatThreadHeader
           backAction={backAction}
-          chatId={chatId}
           chatName={chatName}
           isMuted={isMuted}
           threadId={threadId}
           threadSubscribed={threadSubscribed}
           threadArchived={threadArchived}
           threadSubLoading={threadSubLoading}
-          wsConnected={wsConnected}
           onOpenMembers={handleOpenMembers}
           onOpenGroupInfo={handleOpenGroupInfo}
           onToggleThreadSubscription={handleToggleThreadSubscription}

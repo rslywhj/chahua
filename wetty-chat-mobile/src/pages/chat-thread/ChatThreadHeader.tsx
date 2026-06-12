@@ -1,18 +1,18 @@
 import { IonButton, IonButtons, IonHeader, IonIcon, IonProgressBar, IonTitle, IonToolbar } from '@ionic/react';
 import { informationCircleOutline, notifications, notificationsOffOutline, people } from 'ionicons/icons';
+import { useSelector } from 'react-redux';
 import { BackButton } from '@/components/BackButton';
+import type { RootState } from '@/store/index';
 import type { BackAction } from '@/types/back-action';
 
 interface ChatThreadHeaderProps {
   backAction?: BackAction;
-  chatId: string;
   chatName: string;
   isMuted: boolean;
   threadId?: string;
   threadSubscribed: boolean | null;
   threadArchived: boolean;
   threadSubLoading: boolean;
-  wsConnected: boolean;
   onOpenMembers: () => void;
   onOpenGroupInfo: () => void;
   onToggleThreadSubscription: () => void;
@@ -26,11 +26,12 @@ export function ChatThreadHeader({
   threadSubscribed,
   threadArchived,
   threadSubLoading,
-  wsConnected,
   onOpenMembers,
   onOpenGroupInfo,
   onToggleThreadSubscription,
 }: ChatThreadHeaderProps) {
+  const wsConnected = useSelector((state: RootState) => state.connection.wsConnected);
+
   return (
     <IonHeader>
       <IonToolbar>
