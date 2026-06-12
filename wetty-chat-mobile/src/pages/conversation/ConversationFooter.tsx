@@ -10,7 +10,7 @@ import {
   type ReplyTo,
 } from '@/components/chat/compose/MessageComposeBar';
 
-interface ChatThreadFooterProps {
+interface ConversationFooterProps {
   chatId: string;
   draftKey: string;
   isKeyboardOpen: boolean;
@@ -27,7 +27,7 @@ interface ChatThreadFooterProps {
   onRequestEditLastMessage: () => boolean;
 }
 
-export function ChatThreadFooter({
+export function ConversationFooter({
   chatId,
   draftKey,
   isKeyboardOpen,
@@ -42,9 +42,9 @@ export function ChatThreadFooter({
   editing,
   onCancelEdit,
   onRequestEditLastMessage,
-}: ChatThreadFooterProps) {
+}: ConversationFooterProps) {
   return (
-    <IonFooter className={`chat-thread-footer${isKeyboardOpen ? ' keyboard-open' : ''}`}>
+    <IonFooter className={`conversation-footer${isKeyboardOpen ? ' keyboard-open' : ''}`}>
       <MessageComposeBar
         ref={composeBarRef}
         chatId={chatId}

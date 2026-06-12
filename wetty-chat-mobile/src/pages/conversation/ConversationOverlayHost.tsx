@@ -12,7 +12,7 @@ interface OverlayMessageState {
   interactionPos?: { x: number; y: number };
 }
 
-interface ChatThreadOverlayHostProps {
+interface ConversationOverlayHostProps {
   chatId: string;
   currentUserId: number | null;
   isAdmin: boolean;
@@ -34,7 +34,7 @@ interface ChatThreadOverlayHostProps {
   onCloseOverlay: () => void;
 }
 
-export function ChatThreadOverlayHost({
+export function ConversationOverlayHost({
   chatId,
   currentUserId,
   isAdmin,
@@ -54,7 +54,7 @@ export function ChatThreadOverlayHost({
   quickReactionEmojis,
   onReactionToggle,
   onCloseOverlay,
-}: ChatThreadOverlayHostProps) {
+}: ConversationOverlayHostProps) {
   const msg = overlayMessage?.message;
 
   return (

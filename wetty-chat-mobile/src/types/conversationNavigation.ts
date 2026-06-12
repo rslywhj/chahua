@@ -1,4 +1,4 @@
-export interface ChatThreadRouteState {
+export interface ConversationRouteState {
   backgroundPath?: string;
 }
 

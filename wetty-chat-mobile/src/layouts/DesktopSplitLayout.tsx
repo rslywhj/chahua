@@ -7,10 +7,10 @@ import { addCircleOutline, arrowBack } from 'ionicons/icons';
 import { UserAvatar } from '@/components/UserAvatar';
 import { ChatList } from '@/components/chat/lists/ChatList';
 import type { ChatListTab } from '@/components/chat/lists/ChatListSegment';
-import ChatThreadCore from '@/pages/chat-thread/chat-thread';
-import GroupInfoCore, { GroupSavedMessagesCore, GroupSettingsCore } from '@/pages/chat-thread/group-info';
-import ChatMembersCore from '@/pages/chat-thread/chat-members';
-import ChatInvitesCore from '@/pages/chat-thread/manage-invites';
+import ConversationPane from '@/pages/conversation/conversation';
+import GroupInfoCore, { GroupSavedMessagesCore, GroupSettingsCore } from '@/pages/conversation/group-info';
+import ChatMembersCore from '@/pages/conversation/chat-members';
+import ChatInvitesCore from '@/pages/conversation/manage-invites';
 import CreateChatCore from '@/pages/create-chat';
 import { InvitePreviewCore } from '@/pages/invite-preview';
 import { JoinChatCore } from '@/pages/join-chat';
@@ -21,7 +21,7 @@ import { LanguagePageCore } from '@/pages/settings/language';
 import { StickerSettingsCore } from '@/pages/settings/stickers';
 import { StickerPackDetailCore } from '@/pages/settings/sticker-pack-detail';
 import type { BackAction } from '@/types/back-action';
-import type { ChatThreadRouteState } from '@/types/chatThreadNavigation';
+import type { ConversationRouteState } from '@/types/conversationNavigation';
 import styles from './DesktopSplitLayout.module.scss';
 import { HeaderActionMenu, type HeaderActionMenuItem } from '@/components/HeaderActionMenu';
 import { useHasGlobalPermission } from '@/hooks/useHasGlobalPermission';
@@ -29,7 +29,7 @@ import { useFeatureGate } from '@/hooks/useFeatureGate';
 import type { RootState } from '@/store';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
-type DesktopRouteState = ChatThreadRouteState;
+type DesktopRouteState = ConversationRouteState;
 
 interface DesktopRouteMatches {
   activeChatId: string | undefined;
@@ -363,7 +363,7 @@ export function DesktopSplitLayout() {
   if (threadMatch) {
     const { id, threadId } = threadMatch;
     subPageOverlay = (
-      <ChatThreadCore
+      <ConversationPane
         key={threadId}
         chatId={id}
         threadId={threadId}
@@ -415,10 +415,10 @@ export function DesktopSplitLayout() {
         />
       </div>
       <div className={styles.desktopSplitRight}>
-        {/* Base layer: always render ChatThreadCore when a chat is selected */}
+        {/* Base layer: always render ConversationPane when a chat is selected */}
         {activeChatId && !isNewChat && !joinPreviewMatch && (
           <div style={{ display: subPageOverlay ? 'none' : undefined }} className={styles.desktopSplitPane}>
-            <ChatThreadCore key={activeChatId} chatId={activeChatId} />
+            <ConversationPane key={activeChatId} chatId={activeChatId} />
           </div>
         )}
 

@@ -92,7 +92,7 @@ function useInviteChatResolver(onResolved: InvitePreviewCardProps['onResolved'])
       const chatsResponse = await getChats();
       dispatch(setChatsList({ chats: chatsResponse.data.chats ?? [] }));
     } catch {
-      // The chat thread can still load lazily after navigation.
+      // The conversation can still load lazily after navigation.
     }
 
     await onResolved(chat);

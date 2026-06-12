@@ -11,10 +11,10 @@ import ThreadsPage from '@/pages/threads';
 import { CreateChatPage } from '@/pages/create-chat';
 import InvitePreviewPage from '@/pages/invite-preview';
 import JoinChatPage from '@/pages/join-chat';
-import { ChatThreadPage } from '@/pages/chat-thread/chat-thread';
-import { GroupInfoPage, GroupSavedMessagesPage, GroupSettingsPage } from '@/pages/chat-thread/group-info';
-import { ChatMembersPage } from '@/pages/chat-thread/chat-members';
-import { ChatInvitesPage } from '@/pages/chat-thread/manage-invites';
+import { ConversationPage } from '@/pages/conversation/conversation';
+import { GroupInfoPage, GroupSavedMessagesPage, GroupSettingsPage } from '@/pages/conversation/group-info';
+import { ChatMembersPage } from '@/pages/conversation/chat-members';
+import { ChatInvitesPage } from '@/pages/conversation/manage-invites';
 import SettingsPage from '@/pages/settings';
 import SavedMessagesPage from '@/pages/saved-messages';
 import GeneralSettingsPage from '@/pages/settings/general';
@@ -81,8 +81,8 @@ const MobileLayout: React.FC = () => {
         <Route path="/chats/new" exact component={CreateChatPage} />
         <Route path="/chats/join" exact component={JoinChatPage} />
         <Route path="/chats/join/:inviteCode" exact component={InvitePreviewPage} />
-        <Route path="/chats/chat/:id" exact component={ChatThreadPage} />
-        <Route path="/chats/chat/:id/thread/:threadId" exact component={ChatThreadPage} />
+        <Route path="/chats/chat/:id" exact component={ConversationPage} />
+        <Route path="/chats/chat/:id/thread/:threadId" exact component={ConversationPage} />
         {whenFeature(
           'savedMessages',
           <Route path="/chats/chat/:id/group-info/saved-messages" exact component={GroupSavedMessagesPage} />,

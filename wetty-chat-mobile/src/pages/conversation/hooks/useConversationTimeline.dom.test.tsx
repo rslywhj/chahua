@@ -7,7 +7,7 @@ import { getMessages } from '@/api/messages';
 import { getThreadReadState } from '@/api/threads';
 import type { VirtualScrollHandle } from '@/components/chat/virtualScroll/types';
 import type { RootState } from '@/store';
-import { useChatThreadTimeline } from './useChatThreadTimeline';
+import { useConversationTimeline } from './useConversationTimeline';
 
 function response<T>(data: T): AxiosResponse<T> {
   return { data } as AxiosResponse<T>;
@@ -56,7 +56,7 @@ vi.mock('@lingui/core/macro', () => ({
 }));
 
 interface HookState {
-  timeline: ReturnType<typeof useChatThreadTimeline>;
+  timeline: ReturnType<typeof useConversationTimeline>;
 }
 
 function emptyState(messages: MessageResponse[] = []): RootState {
@@ -90,7 +90,7 @@ function TestComponent({
   onRender: (state: HookState) => void;
   showToast: (message: string) => void;
 }) {
-  const timeline = useChatThreadTimeline({
+  const timeline = useConversationTimeline({
     chatId: 'chat-1',
     storeChatId: threadId ? `chat-1_thread_${threadId}` : 'chat-1',
     threadId,
@@ -105,7 +105,7 @@ function TestComponent({
   return null;
 }
 
-describe('useChatThreadTimeline', () => {
+describe('useConversationTimeline', () => {
   let host: HTMLDivElement;
   let root: Root;
   let state: HookState;

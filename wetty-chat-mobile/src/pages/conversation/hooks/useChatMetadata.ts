@@ -14,7 +14,7 @@ import {
   setChatUnreadCount,
 } from '@/store/chatsSlice';
 import type { RootState } from '@/store/index';
-import { hasLoadedThreadChatMeta } from '../utils/chatThreadUtils';
+import { hasLoadedThreadChatMeta } from '../utils/conversationUtils';
 
 interface UseChatMetadataArgs {
   chatId: string;

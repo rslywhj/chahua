@@ -27,9 +27,9 @@ import {
 } from '@/store/messages/selectors';
 import { collectTimelineSnapshot, logTimelineDiagnostic } from '@/store/messages/timelineDiagnostics';
 import type { RootState } from '@/store';
-import { areMessageListsEquivalent, isMessageAtOrAfter, parseComparableMessageId } from '../utils/chatThreadUtils';
+import { areMessageListsEquivalent, isMessageAtOrAfter, parseComparableMessageId } from '../utils/conversationUtils';
 
-interface UseChatThreadTimelineArgs {
+interface UseConversationTimelineArgs {
   chatId: string;
   storeChatId: string;
   threadId?: string;
@@ -41,7 +41,7 @@ interface UseChatThreadTimelineArgs {
   showToast: (text: string, duration?: number, options?: { positionAnchor?: string }) => void;
 }
 
-export function useChatThreadTimeline({
+export function useConversationTimeline({
   chatId,
   storeChatId,
   threadId,
@@ -51,7 +51,7 @@ export function useChatThreadTimeline({
   threadLastReadMessageIdRef,
   formatDateSeparator,
   showToast,
-}: UseChatThreadTimelineArgs) {
+}: UseConversationTimelineArgs) {
   const dispatch = useDispatch();
   const scrollApiRef = useRef<VirtualScrollHandle | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -167,7 +167,7 @@ export function useChatThreadTimeline({
       const forceReopen = options?.forceReopen ?? false;
       if (!chatId) return;
       if (import.meta.env.DEV) {
-        console.log('[ChatThread] fetchLatestWindow:start', {
+        console.log('[Conversation] fetchLatestWindow:start', {
           chatId,
           storeChatId,
           threadId: threadId ?? null,
@@ -209,7 +209,7 @@ export function useChatThreadTimeline({
             prevCursor !== currentPrevCursor;
 
           if (import.meta.env.DEV) {
-            console.log('[ChatThread] fetchLatestWindow:resolved', {
+            console.log('[Conversation] fetchLatestWindow:resolved', {
               chatId,
               storeChatId,
               threadId: threadId ?? null,
@@ -243,7 +243,7 @@ export function useChatThreadTimeline({
               initialResumeMessageId ?? (threadId ? threadLastReadMessageIdRef.current : lastReadMessageId);
             resetAnchor(resumeId);
           } else if (import.meta.env.DEV) {
-            console.log('[ChatThread] initialAnchor-preserved', {
+            console.log('[Conversation] initialAnchor-preserved', {
               reason: 'fetchLatestWindow-equivalentWindow',
               chatId,
               storeChatId,
@@ -332,7 +332,7 @@ export function useChatThreadTimeline({
             threadLastReadMessageIdRef.current = res.data.lastReadMessageId;
           })
           .catch((err) => {
-            console.debug('[ChatThread] getThreadReadState failed, falling back', err);
+            console.debug('[Conversation] getThreadReadState failed, falling back', err);
           })
           .finally(() => {
             fetchLatestWindow();
@@ -359,7 +359,7 @@ export function useChatThreadTimeline({
         }
         const list = res.data.messages ?? [];
         if (import.meta.env.DEV) {
-          console.log('[ChatThread] loadMore resolved', {
+          console.log('[Conversation] loadMore resolved', {
             fetchedCount: list.length,
             oldestId: list[0]?.id ?? null,
             newestId: list[list.length - 1]?.id ?? null,
@@ -429,7 +429,7 @@ export function useChatThreadTimeline({
           const targetMessage = list.find((message) => message.id === messageId) ?? null;
 
           if (import.meta.env.DEV) {
-            console.log('[ChatThread] jumpToMessage fetched-window', {
+            console.log('[Conversation] jumpToMessage fetched-window', {
               chatId,
               storeChatId,
               threadId: threadId ?? null,

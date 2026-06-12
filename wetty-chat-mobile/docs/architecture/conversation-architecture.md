@@ -1,10 +1,10 @@
-# Chat Thread Modularization Architecture
+# Conversation Modularization Architecture
 
 Status: first refactor pass implemented; remaining cleanup plan retained
-Scope: React PWA chat thread, virtual scroll, and message bubble rendering
+Scope: React PWA conversation, virtual scroll, and message bubble rendering
 Primary files:
 
-- `src/pages/chat-thread/chat-thread.tsx`
+- `src/pages/conversation/conversation.tsx`
 - `src/components/chat/virtualScroll/**`
 - `src/components/chat/messages/**`
 - `src/components/chat/compose/**`
@@ -12,15 +12,15 @@ Primary files:
 
 ## Summary
 
-The chat thread experience originally worked through a large page component plus two large rendering subsystems:
+The conversation experience originally worked through a large page component plus two large rendering subsystems:
 
-- `chat-thread.tsx` is the product orchestration layer, but it has grown into a 2,235 line component.
-- `ChatVirtualScroll.tsx` is a chat-specific virtualizer with a useful public API, but its internals are a 2,531 line component.
-- `ChatBubbleBase.tsx` is the main regular-message renderer and is 668 lines.
+- `conversation.tsx` is the product orchestration layer, but it has grown into a 552 line component.
+- `ChatVirtualScroll.tsx` is a chat-specific virtualizer with a useful public API, but its internals are a 2,408 line component.
+- `ChatBubbleBase.tsx` is the main regular-message renderer and is 547 lines.
 
 The immediate cleanup goal is not to redesign chat behavior. The goal is to preserve the current behavior while making the code easier to reason about, test, and change. The safest path is a staged extraction:
 
-1. Keep routing and page identity in `chat-thread.tsx`.
+1. Keep routing and page identity in `conversation.tsx`.
 2. Extract page behavior into hooks with explicit contracts.
 3. Keep `ChatVirtualScroll`'s public API stable while splitting its internals.
 4. Move row modeling out of `virtualScroll` because it is message presentation logic.
@@ -33,11 +33,11 @@ This pass keeps behavior intentionally conservative while cutting the largest pa
 
 | Area                 | Before                                   | After                                                                                              |
 | -------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Chat thread page     | `chat-thread.tsx`, 2,235 LOC             | `chat-thread.tsx`, 619 LOC, delegates behavior to focused hooks/components.                        |
-| Timeline/read state  | Inline in `chat-thread.tsx`              | `useChatThreadTimeline`, `useChatReadTracking`.                                                    |
-| Sending/upload       | Inline in `chat-thread.tsx`              | `useChatMessageSender`.                                                                            |
+| Conversation page     | `conversation.tsx`, 552 LOC             | `conversation.tsx`, 552 LOC, delegates behavior to focused hooks/components.                        |
+| Timeline/read state  | Inline in `conversation.tsx`              | `useConversationTimeline`, `useChatReadTracking`.                                                    |
+| Sending/upload       | Inline in `conversation.tsx`              | `useChatMessageSender`.                                                                            |
 | Overlay/reactions    | Inline action and reaction handlers      | `overlayActionPolicy`, `useMessageOverlayActions`, `useMessageReactions`.                          |
-| Header/footer/modals | Inline JSX in page                       | `ChatThreadHeader`, `ChatThreadFooter`, `ChatThreadOverlayHost`.                                   |
+| Header/footer/modals | Inline JSX in page                       | `ConversationHeader`, `ConversationFooter`, `ConversationOverlayHost`.                                   |
 | Virtual scroll       | Math and estimation helpers in component | `layoutMath`, `rowHeightEstimator`; public `ChatVirtualScroll` API unchanged.                      |
 | Bubble text content  | Link/mention renderer in base bubble     | `messageContent` renderer; `ChatBubbleBase` remains responsible for bubble layout/media/reactions. |
 
@@ -45,8 +45,8 @@ Implemented module map:
 
 ```mermaid
 flowchart TD
-  Page["chat-thread.tsx<br/>619 LOC shell"] --> Header["ChatThreadHeader"]
-  Page --> Timeline["useChatThreadTimeline"]
+  Page["conversation.tsx<br/>552 LOC shell"] --> Header["ConversationHeader"]
+  Page --> Timeline["useConversationTimeline"]
   Page --> Read["useChatReadTracking"]
   Page --> Sender["useChatMessageSender"]
   Page --> Reactions["useMessageReactions"]
@@ -54,8 +54,8 @@ flowchart TD
   Page --> Pins["useChatPins"]
   Page --> ThreadSub["useThreadSubscription"]
   Page --> Keyboard["useKeyboardViewport"]
-  Page --> Footer["ChatThreadFooter"]
-  Page --> OverlayHost["ChatThreadOverlayHost"]
+  Page --> Footer["ConversationFooter"]
+  Page --> OverlayHost["ConversationOverlayHost"]
 
   Timeline --> Rows["useChatRows"]
   Rows --> Virtual["ChatVirtualScroll"]
@@ -73,8 +73,8 @@ The deeper virtualizer state-machine split and finer-grained bubble media/chrome
 
 ```mermaid
 flowchart TD
-  Route["Route params<br/>chatId, threadId, hash"] --> Page["ChatThreadPage"]
-  Page --> Core["ChatThreadCore<br/>2,235 LOC"]
+  Route["Route params<br/>chatId, threadId, hash"] --> Page["ConversationPage"]
+  Page --> Core["ConversationPane<br/>552 LOC"]
 
   Core --> Selectors["Redux selectors<br/>chat meta, messages, settings,<br/>threads, pins, connection"]
   Core --> MessageAPI["messages API<br/>get/send/update/delete/reactions"]
@@ -83,7 +83,7 @@ flowchart TD
   Core --> UploadAPI["upload API"]
 
   Core --> Rows["useChatRows<br/>date separators, grouping,<br/>showName/showAvatar"]
-  Rows --> Virtual["ChatVirtualScroll<br/>2,531 LOC"]
+  Rows --> Virtual["ChatVirtualScroll<br/>2,408 LOC"]
   Virtual --> RenderRow["renderRow callback"]
   RenderRow --> Row["ChatMessageRow"]
   Row --> Bubble["ChatBubble / StickerBubble"]
@@ -96,28 +96,28 @@ flowchart TD
   Core --> MessageStore["messages slice<br/>segments, optimistic messages,<br/>pending live messages"]
 ```
 
-### `chat-thread.tsx`
+### `conversation.tsx`
 
 The page currently owns these responsibilities:
 
 | Concern              | Current owner                              | Notes                                                                            |
 | -------------------- | ------------------------------------------ | -------------------------------------------------------------------------------- |
-| Route identity       | `ChatThreadPage`, `ChatThreadCore`         | Reads `chatId`, optional `threadId`, resume hash, history.                       |
-| Store identity       | `chat-thread.tsx`                          | Builds `storeChatId` for main chat vs thread.                                    |
-| Chat metadata        | `chat-thread.tsx`                          | Fetches group info, mute state, role state.                                      |
-| Timeline loading     | `chat-thread.tsx`                          | Fetches latest, around, older, newer windows and dispatches timeline reducers.   |
-| Scroll anchors       | `chat-thread.tsx`                          | Owns `initialAnchor`, scroll API ref, jump-to-message behavior.                  |
-| Read receipts        | `chat-thread.tsx`                          | Main chat and thread read timers are inline.                                     |
-| Floating date        | `chat-thread.tsx` plus `ChatVirtualScroll` | Page formats labels; virtualizer detects collision.                              |
-| Scroll-to-bottom FAB | `chat-thread.tsx`                          | Mixes unread count, pending live count, direction, and latest recovery.          |
-| Thread subscription  | `chat-thread.tsx`                          | Fetches and mutates subscribed/archive state.                                    |
-| Pins                 | `chat-thread.tsx` plus pin components      | Loads pins and builds pin/unpin overlay actions.                                 |
-| Reply/edit state     | `chat-thread.tsx`                          | Manages `replyingTo`, `editingSession`, compose focus.                           |
-| Sending              | `chat-thread.tsx`                          | Text, sticker, and audio optimistic send flows are inline.                       |
-| Reactions            | `chat-thread.tsx`                          | Optimistic reaction mutation and recent reaction tracking are inline.            |
-| Overlay actions      | `chat-thread.tsx`                          | Builds copy, save, favorite, reply, thread, edit, delete, pin, reaction details. |
-| Modals               | `chat-thread.tsx`                          | Owns profile, reaction detail, sticker preview, and pin list state.              |
-| Render composition   | `chat-thread.tsx`                          | Header, `IonContent`, virtual scroll, footer, modals, overlay host.              |
+| Route identity       | `ConversationPage`, `ConversationPane`         | Reads `chatId`, optional `threadId`, resume hash, history.                       |
+| Store identity       | `conversation.tsx`                          | Builds `storeChatId` for main chat vs thread.                                    |
+| Chat metadata        | `conversation.tsx`                          | Fetches group info, mute state, role state.                                      |
+| Timeline loading     | `conversation.tsx`                          | Fetches latest, around, older, newer windows and dispatches timeline reducers.   |
+| Scroll anchors       | `conversation.tsx`                          | Owns `initialAnchor`, scroll API ref, jump-to-message behavior.                  |
+| Read receipts        | `conversation.tsx`                          | Main chat and thread read timers are inline.                                     |
+| Floating date        | `conversation.tsx` plus `ChatVirtualScroll` | Page formats labels; virtualizer detects collision.                              |
+| Scroll-to-bottom FAB | `conversation.tsx`                          | Mixes unread count, pending live count, direction, and latest recovery.          |
+| Thread subscription  | `conversation.tsx`                          | Fetches and mutates subscribed/archive state.                                    |
+| Pins                 | `conversation.tsx` plus pin components      | Loads pins and builds pin/unpin overlay actions.                                 |
+| Reply/edit state     | `conversation.tsx`                          | Manages `replyingTo`, `editingSession`, compose focus.                           |
+| Sending              | `conversation.tsx`                          | Text, sticker, and audio optimistic send flows are inline.                       |
+| Reactions            | `conversation.tsx`                          | Optimistic reaction mutation and recent reaction tracking are inline.            |
+| Overlay actions      | `conversation.tsx`                          | Builds copy, save, favorite, reply, thread, edit, delete, pin, reaction details. |
+| Modals               | `conversation.tsx`                          | Owns profile, reaction detail, sticker preview, and pin list state.              |
+| Render composition   | `conversation.tsx`                          | Header, `IonContent`, virtual scroll, footer, modals, overlay host.              |
 
 The page is therefore both a screen component and a controller for timeline, read state, sending, actions, and overlays.
 
@@ -203,7 +203,7 @@ The main coupling issue is that action policy and mutation policy still live in 
 Examples:
 
 - `ChatMessageRow` receives page callbacks for reply, jump-to-reply, long press, avatar click, thread click, reaction toggle, and sticker tap.
-- `MessageOverlay` renders actions, but `chat-thread.tsx` decides which actions exist and runs every side effect.
+- `MessageOverlay` renders actions, but `conversation.tsx` decides which actions exist and runs every side effect.
 - Reaction display is in bubble components, quick reaction UI is in overlay, reaction mutation is in the page, and reaction detail fetching is in a modal.
 - Optimistic attachment preview object URLs are created in the page, while attachment display lives in the bubble renderer and upload UI lives in compose.
 
@@ -213,10 +213,10 @@ The target keeps the route page thin and moves behavior into named hooks/control
 
 ```mermaid
 flowchart TD
-  Route["ChatThreadPage<br/>route params"] --> Shell["ChatThreadCore<br/>thin shell"]
+  Route["ConversationPage<br/>route params"] --> Shell["ConversationPane<br/>thin shell"]
 
-  Shell --> Identity["useChatThreadIdentity<br/>chatId, threadId, storeChatId,<br/>resume hash, navigation helpers"]
-  Shell --> Timeline["useChatThreadTimeline<br/>latest/around/older/newer,<br/>jump, anchors, pending live"]
+  Shell --> Identity["useConversationIdentity<br/>chatId, threadId, storeChatId,<br/>resume hash, navigation helpers"]
+  Shell --> Timeline["useConversationTimeline<br/>latest/around/older/newer,<br/>jump, anchors, pending live"]
   Shell --> Read["useChatReadTracking<br/>main chat + thread read receipts"]
   Shell --> ThreadSub["useThreadSubscription"]
   Shell --> Pins["useChatPins"]
@@ -225,10 +225,10 @@ flowchart TD
   Shell --> OverlayActions["useMessageOverlayActions"]
   Shell --> Keyboard["useKeyboardViewport"]
 
-  Shell --> Header["ChatThreadHeader"]
-  Shell --> Body["ChatThreadScrollBody"]
-  Shell --> Footer["ChatThreadFooter"]
-  Shell --> OverlayHost["ChatThreadOverlayHost"]
+  Shell --> Header["ConversationHeader"]
+  Shell --> Body["ConversationScrollBody"]
+  Shell --> Footer["ConversationFooter"]
+  Shell --> OverlayHost["ConversationOverlayHost"]
 
   Body --> Rows["chat message rows<br/>message presentation module"]
   Rows --> Virtual["ChatVirtualScroll<br/>same public API"]
@@ -242,15 +242,15 @@ flowchart TD
 This is a proposed structure, not a required exact path list.
 
 ```text
-src/pages/chat-thread/
-  chat-thread.tsx
-  ChatThreadHeader.tsx
-  ChatThreadScrollBody.tsx
-  ChatThreadFooter.tsx
-  ChatThreadOverlayHost.tsx
+src/pages/conversation/
+  conversation.tsx
+  ConversationHeader.tsx
+  ConversationScrollBody.tsx
+  ConversationFooter.tsx
+  ConversationOverlayHost.tsx
   hooks/
-    useChatThreadIdentity.ts
-    useChatThreadTimeline.ts
+    useConversationIdentity.ts
+    useConversationTimeline.ts
     useChatReadTracking.ts
     useThreadSubscription.ts
     useChatPins.ts
@@ -258,7 +258,7 @@ src/pages/chat-thread/
     useMessageOverlayActions.ts
     useKeyboardViewport.ts
   utils/
-    chatThreadIds.ts
+    conversationIds.ts
     messageDrafts.ts
     optimisticMessages.ts
     overlayActionPolicy.ts
@@ -297,9 +297,9 @@ src/components/chat/virtualScroll/
   MeasuredRow.tsx
 ```
 
-### What Stays In `chat-thread.tsx`
+### What Stays In `conversation.tsx`
 
-`chat-thread.tsx` should remain the place where the route becomes a screen.
+`conversation.tsx` should remain the place where the route becomes a screen.
 
 Keep:
 
@@ -321,7 +321,7 @@ Do not keep:
 
 ## Proposed Hooks And Contracts
 
-### `useChatThreadTimeline`
+### `useConversationTimeline`
 
 Owns timeline fetches and scroll anchors.
 
@@ -596,8 +596,8 @@ Centralize predicates and helpers:
 ```mermaid
 sequenceDiagram
   participant User
-  participant Shell as ChatThreadCore
-  participant Timeline as useChatThreadTimeline
+  participant Shell as ConversationPane
+  participant Timeline as useConversationTimeline
   participant Store as messages slice
   participant Virtual as ChatVirtualScroll
   participant Rows as ChatMessageRow
@@ -668,7 +668,7 @@ Tasks:
 
 ### Phase 1: Low-Risk Page Extractions
 
-Goal: shrink `chat-thread.tsx` without touching timeline or send behavior.
+Goal: shrink `conversation.tsx` without touching timeline or send behavior.
 
 Tasks:
 
@@ -682,9 +682,9 @@ Tasks:
 3. Extract `useChatPins`.
 4. Extract `useKeyboardViewport`.
 5. Split render-only shell components:
-   - `ChatThreadHeader`
-   - `ChatThreadFooter`
-   - `ChatThreadOverlayHost`
+   - `ConversationHeader`
+   - `ConversationFooter`
+   - `ConversationOverlayHost`
 
 Expected result:
 
@@ -717,7 +717,7 @@ Tasks:
 
 1. Add tests for jump/resume and read tracking behavior.
 2. Extract `useChatReadTracking`.
-3. Extract `useChatThreadTimeline`.
+3. Extract `useConversationTimeline`.
 4. Remove page reads of raw message slice internals.
 5. Keep `ChatVirtualScroll` public API unchanged.
 
@@ -778,7 +778,7 @@ Tasks:
 
 Expected result:
 
-- Bubble rendering changes no longer require editing a 600+ line component.
+- Bubble rendering changes no longer require editing a 500+ line component.
 - Regular and sticker bubbles share common chrome instead of duplicating it.
 
 ## Risk Matrix
@@ -798,7 +798,7 @@ Expected result:
 
 The cleanup can be considered complete when:
 
-- `chat-thread.tsx` is a thin page shell with route/layout wiring and hook composition.
+- `conversation.tsx` is a thin page shell with route/layout wiring and hook composition.
 - Timeline, read tracking, sending, reactions, overlay actions, pins, thread subscription, and keyboard viewport behavior live in named hooks.
 - `ChatVirtualScroll.tsx` is an orchestrator with internal hooks for height, staging, anchoring, edge loads, visible tracking, and imperative API.
 - Message row modeling no longer lives under `virtualScroll`.
@@ -813,7 +813,7 @@ The cleanup can be considered complete when:
 - Do not redesign visual appearance of chat bubbles.
 - Do not change failed-send UX unless explicitly scoped.
 - Do not replace the custom virtualizer during this plan.
-- Do not move the whole chat thread to a new state library.
+- Do not move the whole conversation to a new state library.
 
 ## Open Questions
 

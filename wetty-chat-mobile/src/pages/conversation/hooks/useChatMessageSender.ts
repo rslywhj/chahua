@@ -20,7 +20,11 @@ import { messageAdded, messageConfirmed, messagePatched } from '@/store/messageE
 import { setThreadReadState } from '@/store/threadsSlice';
 import { syncAppBadgeCount } from '@/utils/badges';
 import { getUploadMimeType } from '@/utils/heicMedia';
-import { areAttachmentIdsEqual, buildOptimisticUploadedAttachments, generateClientId } from '../utils/chatThreadUtils';
+import {
+  areAttachmentIdsEqual,
+  buildOptimisticUploadedAttachments,
+  generateClientId,
+} from '../utils/conversationUtils';
 
 export interface ChatMessageEditSession extends EditingMessage {
   originalMessage: MessageResponse;

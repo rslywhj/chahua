@@ -126,7 +126,7 @@ export function ChatVirtualScroll({
     let el = overlayMeasureElRef.current;
     if (!el) {
       el = document.createElement('div');
-      el.className = 'chat-thread-floating-date__label';
+      el.className = 'conversation-floating-date__label';
       el.style.visibility = 'hidden';
       el.style.position = 'absolute';
       el.style.pointerEvents = 'none';

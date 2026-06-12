@@ -5,7 +5,7 @@ import { BackButton } from '@/components/BackButton';
 import type { RootState } from '@/store/index';
 import type { BackAction } from '@/types/back-action';
 
-interface ChatThreadHeaderProps {
+interface ConversationHeaderProps {
   backAction?: BackAction;
   chatName: string;
   isMuted: boolean;
@@ -18,7 +18,7 @@ interface ChatThreadHeaderProps {
   onToggleThreadSubscription: () => void;
 }
 
-export function ChatThreadHeader({
+export function ConversationHeader({
   backAction,
   chatName,
   isMuted,
@@ -29,7 +29,7 @@ export function ChatThreadHeader({
   onOpenMembers,
   onOpenGroupInfo,
   onToggleThreadSubscription,
-}: ChatThreadHeaderProps) {
+}: ConversationHeaderProps) {
   const wsConnected = useSelector((state: RootState) => state.connection.wsConnected);
 
   return (
@@ -37,10 +37,10 @@ export function ChatThreadHeader({
       <IonToolbar>
         <IonButtons slot="start">{backAction && <BackButton action={backAction} />}</IonButtons>
         <IonTitle>
-          <span className="chat-thread-title">
+          <span className="conversation-title">
             <span>{chatName}</span>
             {isMuted && !threadId ? (
-              <IonIcon aria-hidden="true" icon={notificationsOffOutline} className="chat-thread-title__icon" />
+              <IonIcon aria-hidden="true" icon={notificationsOffOutline} className="conversation-title__icon" />
             ) : null}
           </span>
         </IonTitle>

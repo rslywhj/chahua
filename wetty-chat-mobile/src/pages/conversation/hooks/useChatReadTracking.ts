@@ -8,7 +8,7 @@ import { setChatLastReadMessageId, setChatUnreadCount } from '@/store/chatsSlice
 import { setThreadReadState } from '@/store/threadsSlice';
 import { syncAppBadgeCount } from '@/utils/badges';
 import { isPageHidden } from '@/utils/dom';
-import { parseComparableMessageId } from '../utils/chatThreadUtils';
+import { parseComparableMessageId } from '../utils/conversationUtils';
 
 interface UseChatReadTrackingArgs {
   chatId: string;

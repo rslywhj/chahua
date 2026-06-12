@@ -60,7 +60,7 @@ import { formatMessagePreview, getNotificationPreviewLabels, truncatePreview } f
 import { getAllDrafts } from '@/utils/draftSync';
 import { onDraftChange } from '@/utils/draftEvents';
 import { loadDraft } from '@/hooks/useChatDraft';
-import { buildResumeHash } from '@/types/chatThreadNavigation';
+import { buildResumeHash } from '@/types/conversationNavigation';
 import { CHAT_LIST_REFRESH_MIN_DURATION_MS } from '@/constants/chatTiming';
 import { type ChatListTab, ChatListSegment } from '@/components/chat/lists/ChatListSegment';
 import { ThreadListRow } from '@/components/chat/lists/ThreadListRow';

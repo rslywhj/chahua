@@ -10,7 +10,7 @@ import {
   isAudioMessage,
   isMessageAtOrAfter,
   parseComparableMessageId,
-} from './chatThreadUtils';
+} from './conversationUtils';
 
 function message(id: string, messageType: MessageResponse['messageType'] = 'text'): MessageResponse {
   return {
@@ -28,7 +28,7 @@ function message(id: string, messageType: MessageResponse['messageType'] = 'text
   };
 }
 
-describe('chat thread utility helpers', () => {
+describe('conversation utility helpers', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(1234);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);

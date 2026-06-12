@@ -42,7 +42,7 @@ This is a direct replacement behind the existing `ChatVirtualScroll` API.
 
 ## Row Model
 
-`chat-thread.tsx` continues to provide a flat `ChatRow[]` model.
+`conversation.tsx` continues to provide a flat `ChatRow[]` model.
 
 Key rules:
 
@@ -346,7 +346,7 @@ UX notes from debugging:
 - show persistent top and bottom edge hints whenever older/newer history may exist, not only after loading starts
 - edge hints must reserve their own visual lane and must not overlap date separators or visible message rows
 
-`chat-thread.tsx` changes:
+`conversation.tsx` changes:
 
 - keep `useChatRows()`
 - keep immediate `prependMessages`

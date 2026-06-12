@@ -6,7 +6,7 @@ import type { MemberSummary } from '@/api/users';
 import { usersApi } from '@/api/users';
 import { ChatMemberRow } from '@/components/chat-members/ChatMemberRow';
 import { useHasGlobalPermission } from '@/hooks/useHasGlobalPermission';
-import styles from '@/pages/chat-thread/chat-members.module.scss';
+import styles from '@/pages/conversation/chat-members.module.scss';
 
 const SEARCH_DEBOUNCE_MS = 250;
 const SEARCH_LIMIT = 20;

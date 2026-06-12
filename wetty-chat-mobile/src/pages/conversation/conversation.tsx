@@ -8,37 +8,37 @@ import { selectCurrentUser } from '@/store/userSlice';
 import { ChatVirtualScroll } from '@/components/chat/virtualScroll/ChatVirtualScroll';
 import type { ChatRow } from '@/components/chat/virtualScroll/types';
 import { type MessageComposeBarHandle } from '@/components/chat/compose/MessageComposeBar';
-import './chat-thread.scss';
+import './conversation.scss';
 import { t } from '@lingui/core/macro';
 import type { BackAction } from '@/types/back-action';
 import { ChatContext } from '@/components/chat/messages/ChatContext';
 import { useIsDesktop, useMouseDetected } from '@/hooks/platformHooks';
 import { ChatMessageRow } from '@/components/chat/messages/ChatMessageRow';
-import { parseResumeHash } from '@/types/chatThreadNavigation';
+import { parseResumeHash } from '@/types/conversationNavigation';
 import { PinBanner } from '@/components/chat/pins/PinBanner';
 import { selectEffectiveLocale } from '@/store/settingsSlice';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
-import { ChatThreadFooter } from './ChatThreadFooter';
-import { ChatThreadHeader } from './ChatThreadHeader';
-import { ChatThreadOverlayHost } from './ChatThreadOverlayHost';
+import { ConversationFooter } from './ConversationFooter';
+import { ConversationHeader } from './ConversationHeader';
+import { ConversationOverlayHost } from './ConversationOverlayHost';
 import { useChatMetadata } from './hooks/useChatMetadata';
 import { useChatPins } from './hooks/useChatPins';
 import { type ChatMessageEditSession, useChatMessageSender } from './hooks/useChatMessageSender';
 import { useChatReadTracking } from './hooks/useChatReadTracking';
-import { useChatThreadTimeline } from './hooks/useChatThreadTimeline';
+import { useConversationTimeline } from './hooks/useConversationTimeline';
 import { useKeyboardViewport } from './hooks/useKeyboardViewport';
 import { useMessageOverlayActions } from './hooks/useMessageOverlayActions';
 import { useMessageReactions } from './hooks/useMessageReactions';
 import { useThreadSubscription } from './hooks/useThreadSubscription';
-import { formatDateSeparator } from './utils/chatThreadUtils';
+import { formatDateSeparator } from './utils/conversationUtils';
 
-interface ChatThreadCoreProps {
+interface ConversationPaneProps {
   chatId: string;
   threadId?: string;
   backAction?: BackAction;
 }
 
-function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
+function ConversationPane({ chatId, threadId, backAction }: ConversationPaneProps) {
   const history = useHistory();
   const location = useLocation();
 
@@ -114,7 +114,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
     handleFirstVisibleMessageChange,
     setMessageListScrolling,
     setFloatingDateColliding,
-  } = useChatThreadTimeline({
+  } = useConversationTimeline({
     chatId,
     storeChatId,
     threadId,
@@ -171,14 +171,14 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.log('[ChatThread] view-mounted', {
+    console.log('[Conversation] view-mounted', {
       chatId,
       storeChatId,
       threadId: threadId ?? null,
       locationState: location.state ?? null,
     });
     return () => {
-      console.log('[ChatThread] view-unmounted', {
+      console.log('[Conversation] view-unmounted', {
         chatId,
         storeChatId,
         threadId: threadId ?? null,
@@ -196,7 +196,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    console.log('[ChatThread] rows-changed', {
+    console.log('[Conversation] rows-changed', {
       chatId,
       storeChatId,
       messageCount: messages.length,
@@ -419,8 +419,8 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
 
   return (
     <ChatContext.Provider value={chatCtx}>
-      <div className="ion-page chat-thread-page" style={pageStyle}>
-        <ChatThreadHeader
+      <div className="ion-page conversation-page" style={pageStyle}>
+        <ConversationHeader
           backAction={backAction}
           chatName={chatName}
           isMuted={isMuted}
@@ -442,7 +442,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
             onClickCounter={openPinList}
           />
         )}
-        <IonContent className="chat-thread-content" scrollX={false} scrollY={false}>
+        <IonContent className="conversation-content" scrollX={false} scrollY={false}>
           <ChatVirtualScroll
             key={storeChatId}
             rows={chatRows}
@@ -451,9 +451,9 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
             topOverlay={
               floatingDateLabel ? (
                 <div
-                  className={`chat-thread-floating-date ${floatingDateFading ? 'chat-thread-floating-date--fading' : ''}`}
+                  className={`conversation-floating-date ${floatingDateFading ? 'conversation-floating-date--fading' : ''}`}
                 >
-                  <span className="chat-thread-floating-date__label">{floatingDateLabel}</span>
+                  <span className="conversation-floating-date__label">{floatingDateLabel}</span>
                 </div>
               ) : null
             }
@@ -481,7 +481,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
           </IonFab>
         </IonContent>
 
-        <ChatThreadFooter
+        <ConversationFooter
           composeBarRef={composeBarRef}
           chatId={chatId}
           draftKey={storeChatId}
@@ -510,7 +510,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
           onCancelEdit={() => setEditingSession(null)}
           onRequestEditLastMessage={requestEditLastOwnMessage}
         />
-        <ChatThreadOverlayHost
+        <ConversationOverlayHost
           chatId={chatId}
           currentUserId={currentUser.uid}
           isAdmin={isAdmin}
@@ -536,7 +536,7 @@ function ChatThreadCore({ chatId, threadId, backAction }: ChatThreadCoreProps) {
   );
 }
 
-export function ChatThreadPage() {
+export function ConversationPage() {
   const { id: chatId, threadId } = useParams<{ id: string; threadId?: string }>();
   const renderKey = threadId ?? chatId;
   const backAction: BackAction = threadId
@@ -544,9 +544,9 @@ export function ChatThreadPage() {
     : { type: 'back', defaultHref: '/chats' };
   return (
     <IonPage>
-      <ChatThreadCore key={renderKey} chatId={chatId} threadId={threadId} backAction={backAction} />
+      <ConversationPane key={renderKey} chatId={chatId} threadId={threadId} backAction={backAction} />
     </IonPage>
   );
 }
 
-export default ChatThreadCore;
+export default ConversationPane;
