@@ -1,5 +1,5 @@
 import axios, { HttpStatusCode } from 'axios';
-import { getCurrentUserId } from '@/js/current-user';
+import { getCurrentUserId } from '@/utils/current-user';
 import { getOrCreateClientId } from '@/utils/clientId';
 import { getStoredJwtToken } from '@/utils/jwtToken';
 

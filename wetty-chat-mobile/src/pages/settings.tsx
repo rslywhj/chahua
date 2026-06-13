@@ -17,7 +17,7 @@ import {
 } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { setCurrentUserId } from '@/js/current-user';
+import { setCurrentUserId } from '@/utils/current-user';
 import type { RootState } from '@/store/index';
 import { Trans } from '@lingui/react/macro';
 import { FeatureGate } from '@/components/FeatureGate';

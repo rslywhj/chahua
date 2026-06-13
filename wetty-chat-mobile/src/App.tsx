@@ -7,7 +7,7 @@ import type { AppDispatch } from '@/store/index';
 import { fetchCurrentUser, setUser } from '@/store/userSlice';
 
 import './app.scss';
-import { getCurrentUserId } from './js/current-user';
+import { getCurrentUserId } from './utils/current-user';
 import { t } from '@lingui/core/macro';
 import MobileLayout from './layouts/MobileLayout';
 import { AppUpdateProvider } from './hooks/AppUpdateProvider';
