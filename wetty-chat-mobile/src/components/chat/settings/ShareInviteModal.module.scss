@@ -16,7 +16,7 @@
   height: 32px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--ion-color-light, rgba(255, 255, 255, 0.86));
   color: var(--ion-color-dark);
   font-size: 20px;
   z-index: 1;
