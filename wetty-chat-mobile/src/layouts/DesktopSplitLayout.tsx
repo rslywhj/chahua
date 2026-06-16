@@ -25,6 +25,7 @@ import type { ConversationRouteState } from '@/types/conversationNavigation';
 import styles from './DesktopSplitLayout.module.scss';
 import { HeaderActionMenu, type HeaderActionMenuItem } from '@/components/HeaderActionMenu';
 import { useHasGlobalPermission } from '@/hooks/useHasGlobalPermission';
+import { useEscNavigation } from '@/hooks/useEscNavigation';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import type { RootState } from '@/store';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -199,6 +200,7 @@ export function DesktopSplitLayout() {
   const canCreateChat = useHasGlobalPermission('chat.create');
   const savedMessagesEnabled = useFeatureGate('savedMessages');
   const currentUser = useSelector((state: RootState) => state.user);
+  useEscNavigation();
   const skipNextGlobalSettingsDismiss = useRef(false);
   const headerActions: HeaderActionMenuItem[] = [
     ...(canCreateChat

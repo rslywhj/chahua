@@ -31,6 +31,7 @@ import { selectChatsWithUnreadCount } from '@/store/chatsSlice';
 import { selectThreadsWithUnreadCount } from '@/store/threadsSlice';
 import styles from './MobileLayout.module.scss';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useEscNavigation } from '@/hooks/useEscNavigation';
 
 const TAB_ROOT_PATHS = ['/', '/chats', '/settings', '/demo'];
 
@@ -46,6 +47,7 @@ const MobileLayout: React.FC = () => {
     exact: true,
   });
   useDocumentTitle(chatMatch?.params.id, threadMatch?.params.threadId);
+  useEscNavigation();
 
   const tabBarButtons = useMemo(() => {
     return featureGatedList([
