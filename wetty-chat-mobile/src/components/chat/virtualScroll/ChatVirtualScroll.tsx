@@ -159,6 +159,7 @@ export function ChatVirtualScroll({
   const initialAnchorConsumedRef = useRef(false);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
   const pendingScrollToBottomRef = useRef(false);
+  const pendingScrollAlignRef = useRef<'top' | 'bottom'>('top');
   const pendingScrollToBottomBehaviorRef = useRef<ScrollBehavior>('auto');
   const pendingScrollToBottomSourceRef = useRef<string | null>(null);
   const pendingPrependRestoreRef = useRef<{ key: string; offsetTop: number } | null>(null);
@@ -537,37 +538,40 @@ export function ChatVirtualScroll({
     container.scrollTop = target;
   }, []);
 
-  const scrollToKeyInternal = useCallback((key: string, behavior: ScrollBehavior = 'auto') => {
-    const container = containerRef.current;
-    const row = rowRefsMap.current.get(key);
-    if (!container || !row) {
-      logVirtualScroll('scroll-to-item-missed-row', {
+  const scrollToKeyInternal = useCallback(
+    (key: string, behavior: ScrollBehavior = 'auto', align: 'top' | 'bottom' = 'top') => {
+      const container = containerRef.current;
+      const row = rowRefsMap.current.get(key);
+      if (!container || !row) {
+        logVirtualScroll('scroll-to-item-missed-row', {
+          key,
+          behavior,
+          hasContainer: container != null,
+          hasRow: row != null,
+          mounted: mountedRef.current,
+        });
+        return false;
+      }
+
+      const maxScroll = container.scrollHeight - container.clientHeight;
+      const rawTarget = align === 'bottom' ? row.offsetTop + row.offsetHeight - container.clientHeight : row.offsetTop;
+      const target = roundScrollValue(Math.max(0, Math.min(rawTarget, maxScroll)));
+      if (behavior === 'auto' && !hasMeaningfulScrollDelta(container.scrollTop, target)) {
+        return true;
+      }
+      logVirtualScroll('scroll-to-item-execute', {
         key,
         behavior,
-        hasContainer: container != null,
-        hasRow: row != null,
+        mode: behavior === 'smooth' ? 'smooth-scroll' : 'jump-scroll',
+        from: container.scrollTop,
+        to: target,
         mounted: mountedRef.current,
       });
-      return false;
-    }
-
-    const target = roundScrollValue(
-      Math.max(0, Math.min(row.offsetTop, container.scrollHeight - container.clientHeight)),
-    );
-    if (behavior === 'auto' && !hasMeaningfulScrollDelta(container.scrollTop, target)) {
+      container.scrollTo({ top: target, behavior });
       return true;
-    }
-    logVirtualScroll('scroll-to-item-execute', {
-      key,
-      behavior,
-      mode: behavior === 'smooth' ? 'smooth-scroll' : 'jump-scroll',
-      from: container.scrollTop,
-      to: target,
-      mounted: mountedRef.current,
-    });
-    container.scrollTo({ top: target, behavior });
-    return true;
-  }, []);
+    },
+    [],
+  );
 
   const triggerJumpTargetHighlight = useCallback((key: string) => {
     if (highlightTimerRef.current) {
@@ -1382,9 +1386,14 @@ export function ChatVirtualScroll({
         mounted: mountedRef.current,
       });
       if (target) {
-        const scrolled = scrollToKeyInternal(target.key, intent.scrollToMessageId.behavior);
+        const scrolled = scrollToKeyInternal(
+          target.key,
+          intent.scrollToMessageId.behavior,
+          intent.scrollToMessageId.align ?? 'top',
+        );
         if (scrolled && pendingScrollMessageIdRef.current === intent.scrollToMessageId.messageId) {
           pendingScrollMessageIdRef.current = null;
+          pendingScrollAlignRef.current = 'top';
           if (
             initialAnchorRef.current.type === 'message' &&
             initialAnchorRef.current.messageId === intent.scrollToMessageId.messageId
@@ -1701,6 +1710,7 @@ export function ChatVirtualScroll({
     pendingScrollMessageIdRef.current = null;
     initialAnchorConsumedRef.current = false;
     pendingScrollToBottomRef.current = false;
+    pendingScrollAlignRef.current = 'top';
     pendingScrollToBottomBehaviorRef.current = 'auto';
     pendingScrollToBottomSourceRef.current = null;
     pendingPrependRestoreRef.current = null;
@@ -1852,6 +1862,7 @@ export function ChatVirtualScroll({
       action: 'scrollToMessageId',
     });
     pendingScrollMessageIdRef.current = anchor.messageId;
+    pendingScrollAlignRef.current = 'bottom';
     pendingScrollBehaviorRef.current = 'auto';
     updateMountedRange(capRange(mounted, rowKeys.length - 1));
     setPhaseState('READY');
@@ -1918,6 +1929,7 @@ export function ChatVirtualScroll({
           scrollToMessageId: {
             messageId: pendingScrollMessageIdRef.current,
             behavior: pendingScrollBehaviorRef.current,
+            align: pendingScrollAlignRef.current,
           },
         };
       } else if (pendingScrollKeyRef.current) {
@@ -1993,6 +2005,7 @@ export function ChatVirtualScroll({
           scrollToMessageId: {
             messageId: pendingScrollMessageIdRef.current,
             behavior: pendingScrollBehaviorRef.current,
+            align: pendingScrollAlignRef.current,
           },
         };
         triggerRender();
@@ -2095,6 +2108,7 @@ export function ChatVirtualScroll({
         pendingScrollKeyRef.current = key;
         pendingScrollMessageIdRef.current = null;
         pendingScrollToBottomRef.current = false;
+        pendingScrollAlignRef.current = 'top';
         pendingScrollToBottomBehaviorRef.current = 'auto';
         pendingScrollToBottomSourceRef.current = null;
         logVirtualScroll('scroll-to-item-requested', {
@@ -2151,6 +2165,7 @@ export function ChatVirtualScroll({
         pendingScrollMessageIdRef.current = messageId;
         pendingScrollKeyRef.current = null;
         pendingScrollToBottomRef.current = false;
+        pendingScrollAlignRef.current = 'top';
         pendingScrollToBottomBehaviorRef.current = 'auto';
         pendingScrollToBottomSourceRef.current = null;
         logVirtualScroll('scroll-to-message-requested', {

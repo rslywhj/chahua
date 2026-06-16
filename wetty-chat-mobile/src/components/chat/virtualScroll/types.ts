@@ -47,7 +47,7 @@ export interface PendingBatch {
 export interface LayoutIntent {
   preserveHeightDelta?: number;
   scrollToBottom?: { behavior: ScrollBehavior };
-  scrollToMessageId?: { messageId: string; behavior: ScrollBehavior };
+  scrollToMessageId?: { messageId: string; behavior: ScrollBehavior; align?: 'top' | 'bottom' };
   scrollToKey?: { key: string; behavior: ScrollBehavior };
 }
 
