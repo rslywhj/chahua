@@ -76,6 +76,19 @@
   white-space: nowrap;
 }
 
+.threadLabel {
+  font-size: 0.78rem;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.threadIcon {
+  font-size: 0.85rem;
+}
+
 .loadMoreWrap {
   padding: 4px 16px 16px;
 }

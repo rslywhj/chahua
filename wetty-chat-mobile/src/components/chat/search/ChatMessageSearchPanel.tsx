@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { IonButton, IonItem, IonLabel, IonList, IonNote, IonSearchbar, IonSpinner, IonText } from '@ionic/react';
+import {
+  IonButton,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonNote,
+  IonSearchbar,
+  IonSpinner,
+  IonText,
+} from '@ionic/react';
+import { chatbubbles } from 'ionicons/icons';
 import { t } from '@lingui/core/macro';
 import { Trans } from '@lingui/react/macro';
 import { useSelector } from 'react-redux';
@@ -63,6 +74,11 @@ function MessageSearchResultRow({ message, locale, onSelect }: MessageSearchResu
           {timestamp ? <IonNote className={styles.timestamp}>{timestamp}</IonNote> : null}
         </div>
         <p className={styles.previewText}>{previewText}</p>
+        {message.replyRootId != null && (
+          <p className={styles.threadLabel}>
+            <IonIcon icon={chatbubbles} className={styles.threadIcon} /> {t`In thread`}
+          </p>
+        )}
       </IonLabel>
     </IonItem>
   );

@@ -558,6 +558,8 @@ msgstr "Groups"
 msgid "Images"
 msgstr "Images"
 
+msgid "In thread"
+msgstr "In thread"
 msgid "indefinitely"
 msgstr "indefinitely"
 

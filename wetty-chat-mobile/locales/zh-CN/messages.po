@@ -558,6 +558,8 @@ msgstr "群组"
 msgid "Images"
 msgstr "图片"
 
+msgid "In thread"
+msgstr "在话题中"
 msgid "indefinitely"
 msgstr "永久"
 
