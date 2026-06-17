@@ -6,14 +6,12 @@ use std::collections::HashMap;
 
 use crate::constants::MAX_UNREAD_COUNT;
 use crate::dto::{
-    messages::{MessagePreview, MessagePreviewAttachment, MessagePreviewSticker},
+    messages::{MessagePreview, MessagePreviewAttachment},
     threads::{ListThreadsResponse, ThreadListItem},
     users::User,
     ws::{ServerWsMessage, ThreadMembershipChangedPayload, ThreadUpdatePayload},
 };
-use crate::handlers::chats::{
-    build_mention_info, build_sender, extract_mention_uids, redact_deleted_message_preview,
-};
+use crate::handlers::chats::{build_message_preview, build_sender, extract_mention_uids};
 use crate::models::{Attachment, Message, MessageType};
 use crate::schema::{attachments, messages, stickers, thread_meta, thread_user_states};
 use crate::services::media::build_public_object_url;
@@ -821,7 +819,7 @@ pub fn enrich_thread_list(
             attachment_msg_ids.push(msg.id);
         }
     }
-    let (first_attachment_map, attachment_preview_all_map): (
+    let (_first_attachment_map, attachment_preview_all_map): (
         HashMap<i64, String>,
         HashMap<i64, Vec<MessagePreviewAttachment>>,
     ) = if attachment_msg_ids.is_empty() {
@@ -851,38 +849,26 @@ pub fn enrich_thread_list(
     for lr in latest_reply_rows {
         latest_reply_map.insert(
             lr.reply_root_id,
-            MessagePreview {
-                id: lr.id,
-                client_generated_id: lr.client_generated_id,
-                created_at: lr.created_at,
-                sender: make_sender(lr.sender_uid),
-                message: lr.message,
-                message_type: lr.message_type,
-                sticker: lr.sticker_id.and_then(|sid| {
-                    sticker_emoji_map
-                        .get(&sid)
-                        .cloned()
-                        .map(|emoji| MessagePreviewSticker { emoji })
-                }),
-                first_attachment_kind: if lr.has_attachments {
-                    first_attachment_map.get(&lr.id).cloned()
-                } else {
-                    None
-                },
-                attachments: attachment_preview_all_map
+            build_message_preview(
+                lr.id,
+                lr.client_generated_id,
+                lr.created_at,
+                make_sender(lr.sender_uid),
+                lr.message,
+                lr.message_type,
+                lr.sticker_id,
+                &sticker_emoji_map,
+                attachment_preview_all_map
                     .get(&lr.id)
                     .cloned()
                     .unwrap_or_default(),
-                is_deleted: false,
-                mentions: mention_uids_per_reply
-                    .get(&lr.reply_root_id)
-                    .map(|uids| {
-                        uids.iter()
-                            .map(|&uid| build_mention_info(uid, &user_avatars, &user_profiles))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            },
+                None,
+                None,
+                Some(&mention_uids_per_reply),
+                Some(lr.reply_root_id),
+                &user_avatars,
+                &user_profiles,
+            ),
         );
     }
 
@@ -897,34 +883,16 @@ pub fn enrich_thread_list(
         .into_iter()
         .filter_map(|row| {
             let root_msg = root_msg_map.get(&row.thread_root_id)?;
-            let mut root_preview = MessagePreview {
-                id: root_msg.id,
-                client_generated_id: root_msg.client_generated_id.clone(),
-                created_at: root_msg.created_at,
-                sender: make_sender(root_msg.sender_uid),
-                message: if root_msg.deleted_at.is_some() {
-                    None
-                } else {
-                    root_msg.message.clone()
-                },
-                message_type: root_msg.message_type.clone(),
-                sticker: root_msg.sticker_id.and_then(|sid| {
-                    (root_msg.deleted_at.is_none())
-                        .then(|| {
-                            sticker_emoji_map
-                                .get(&sid)
-                                .cloned()
-                                .map(|emoji| MessagePreviewSticker { emoji })
-                        })
-                        .flatten()
-                }),
-                first_attachment_kind: if root_msg.deleted_at.is_none() && root_msg.has_attachments
-                {
-                    first_attachment_map.get(&root_msg.id).cloned()
-                } else {
-                    None
-                },
-                attachments: if root_msg.deleted_at.is_none() && root_msg.has_attachments {
+            let root_preview = build_message_preview(
+                root_msg.id,
+                root_msg.client_generated_id.clone(),
+                root_msg.created_at,
+                make_sender(root_msg.sender_uid),
+                root_msg.message.clone(),
+                root_msg.message_type.clone(),
+                root_msg.sticker_id,
+                &sticker_emoji_map,
+                if root_msg.deleted_at.is_none() && root_msg.has_attachments {
                     attachment_preview_all_map
                         .get(&root_msg.id)
                         .cloned()
@@ -932,17 +900,13 @@ pub fn enrich_thread_list(
                 } else {
                     vec![]
                 },
-                is_deleted: root_msg.deleted_at.is_some(),
-                mentions: mention_uids_per_root
-                    .get(&root_msg.id)
-                    .map(|uids| {
-                        uids.iter()
-                            .map(|&uid| build_mention_info(uid, &user_avatars, &user_profiles))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-            };
-            redact_deleted_message_preview(&mut root_preview);
+                root_msg.deleted_at,
+                None,
+                Some(&mention_uids_per_root),
+                Some(root_msg.id),
+                &user_avatars,
+                &user_profiles,
+            );
             Some(ThreadListItem {
                 chat_id: row.chat_id,
                 chat_name: row.chat_name,

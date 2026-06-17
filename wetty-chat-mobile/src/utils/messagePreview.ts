@@ -21,7 +21,6 @@ export interface PreviewMessage {
   messageType?: string | null;
   sticker?: PreviewStickerLike | null;
   attachments?: PreviewAttachmentLike[];
-  firstAttachmentKind?: string | null;
   isDeleted?: boolean;
   mentions?: PreviewMentionLike[] | null;
 }
@@ -93,7 +92,6 @@ function normalizePreviewMessage({
   messageType,
   sticker,
   attachments,
-  firstAttachmentKind,
   isDeleted,
   mentions,
 }: PreviewMessage) {
@@ -102,7 +100,6 @@ function normalizePreviewMessage({
     messageType,
     sticker,
     attachments,
-    firstAttachmentKind,
     isDeleted,
     mentions,
   };
@@ -143,8 +140,7 @@ function attachmentKindToLabel(kind: AttachmentMimeCategory, labels: PreviewLabe
   }
 }
 export function formatMessagePreview(preview: PreviewMessage, labels: PreviewLabels): string {
-  const { message, messageType, sticker, attachments, firstAttachmentKind, isDeleted, mentions } =
-    normalizePreviewMessage(preview);
+  const { message, messageType, sticker, attachments, isDeleted, mentions } = normalizePreviewMessage(preview);
 
   if (isDeleted) {
     return labels.deleted;
@@ -165,11 +161,6 @@ export function formatMessagePreview(preview: PreviewMessage, labels: PreviewLab
   // Build one label per attachment
   const attachmentLabels: string[] =
     attachments?.map((a) => attachmentKindToLabel(categorizeAttachmentKind(a.kind), labels)) ?? [];
-
-  // Fallback when attachments array is absent but firstAttachmentKind is set
-  if (attachmentLabels.length === 0 && firstAttachmentKind) {
-    attachmentLabels.push(attachmentKindToLabel(categorizeAttachmentKind(firstAttachmentKind), labels));
-  }
 
   const prefix = attachmentLabels.join('');
   const text = message?.trim() ? renderMentionsAsText(message, mentions) : '';

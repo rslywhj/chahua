@@ -136,7 +136,6 @@ describe('message listener projections', () => {
       message: null,
       sticker: null,
       attachments: [],
-      firstAttachmentKind: null,
       mentions: [],
     });
   });
@@ -158,7 +157,6 @@ describe('message listener projections', () => {
       message: null,
       sticker: null,
       attachments: [],
-      firstAttachmentKind: null,
       mentions: [],
     });
   });

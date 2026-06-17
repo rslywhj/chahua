@@ -33,7 +33,6 @@ export interface MessagePreview {
   sender: User;
   isDeleted: boolean;
   attachments?: Attachment[];
-  firstAttachmentKind?: string | null;
   mentions?: MentionInfo[] | null;
 }
 
@@ -121,7 +120,6 @@ export function toMessagePreview(message: MessageResponse): MessagePreview {
     },
     isDeleted: message.isDeleted,
     attachments: message.attachments,
-    firstAttachmentKind: message.attachments?.[0]?.kind ?? null,
     mentions: message.mentions ?? null,
   };
 }

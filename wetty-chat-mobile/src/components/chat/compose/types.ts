@@ -9,7 +9,6 @@ export interface ReplyTo {
   text?: string | null;
   sticker?: StickerSummary;
   attachments?: Attachment[];
-  firstAttachmentKind?: string;
   isDeleted?: boolean;
   mentions?: MentionInfo[];
 }

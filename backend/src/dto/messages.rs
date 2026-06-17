@@ -112,7 +112,7 @@ pub struct MessagePreviewSticker {
     pub emoji: String,
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MessagePreviewAttachment {
     pub kind: String,
@@ -131,7 +131,6 @@ pub struct MessagePreview {
     pub message_type: MessageType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sticker: Option<MessagePreviewSticker>,
-    pub first_attachment_kind: Option<String>,
     pub attachments: Vec<MessagePreviewAttachment>,
     pub is_deleted: bool,
     pub mentions: Vec<MentionInfo>,

@@ -307,10 +307,6 @@ fn message_response_preview(response: MessageResponse) -> MessagePreview {
                 emoji: sticker.emoji,
             })
         }),
-        first_attachment_kind: response
-            .attachments
-            .first()
-            .map(|attachment| attachment.kind.clone()),
         attachments: response
             .attachments
             .iter()
@@ -338,16 +334,6 @@ pub fn build_mention_info(
     }
 }
 
-fn first_attachment_kind(
-    message_attachments_map: &std::collections::HashMap<i64, Vec<Attachment>>,
-    message_id: i64,
-) -> Option<String> {
-    message_attachments_map
-        .get(&message_id)
-        .and_then(|attachments| attachments.first())
-        .map(|attachment| attachment.kind.clone())
-}
-
 fn attachment_previews(
     map: &std::collections::HashMap<i64, Vec<Attachment>>,
     message_id: i64,
@@ -363,6 +349,61 @@ fn attachment_previews(
         .unwrap_or_default()
 }
 
+pub(crate) fn build_message_preview(
+    id: i64,
+    client_generated_id: String,
+    created_at: DateTime<Utc>,
+    sender: User,
+    message: Option<String>,
+    message_type: MessageType,
+    sticker_id: Option<i64>,
+    sticker_emoji_map: &std::collections::HashMap<i64, String>,
+    attachments: Vec<MessagePreviewAttachment>,
+    deleted_at: Option<DateTime<Utc>>,
+    mention_source: Option<&str>,
+    mention_uids_map: Option<&std::collections::HashMap<i64, Vec<i32>>>,
+    mention_map_key: Option<i64>,
+    user_avatars: &std::collections::HashMap<i32, Option<String>>,
+    user_profiles: &std::collections::HashMap<i32, UserProfile>,
+) -> MessagePreview {
+    let is_deleted = deleted_at.is_some();
+    let sticker_emoji = sticker_id.and_then(|sid| sticker_emoji_map.get(&sid).cloned());
+    MessagePreview {
+        id,
+        client_generated_id,
+        created_at,
+        sender,
+        message: if is_deleted { None } else { message },
+        message_type,
+        sticker: sticker_emoji
+            .filter(|_| !is_deleted)
+            .map(|emoji| MessagePreviewSticker { emoji }),
+        attachments: if is_deleted { vec![] } else { attachments },
+        is_deleted,
+        mentions: mention_source
+            .filter(|_| !is_deleted)
+            .map(|text| {
+                extract_mention_uids(text)
+                    .into_iter()
+                    .map(|uid| build_mention_info(uid, user_avatars, user_profiles))
+                    .collect()
+            })
+            .or_else(|| {
+                mention_uids_map.map(|uids_map| {
+                    uids_map
+                        .get(&mention_map_key.unwrap_or(id))
+                        .map(|uids| {
+                            uids.iter()
+                                .map(|&uid| build_mention_info(uid, user_avatars, user_profiles))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                })
+            })
+            .unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn message_is_visible_in_thread_scope(message: &Message, thread_root_id: i64) -> bool {
     if !message.is_published {
@@ -374,18 +415,6 @@ pub(crate) fn message_is_visible_in_thread_scope(message: &Message, thread_root_
     }
 
     message.reply_root_id == Some(thread_root_id) && message.deleted_at.is_none()
-}
-
-pub(crate) fn redact_deleted_message_preview(preview: &mut MessagePreview) {
-    if !preview.is_deleted {
-        return;
-    }
-
-    preview.message = None;
-    preview.sticker = None;
-    preview.first_attachment_kind = None;
-    preview.attachments.clear();
-    preview.mentions.clear();
 }
 
 pub(crate) fn redact_deleted_message_response(response: &mut MessageResponse) {
@@ -470,10 +499,13 @@ fn build_push_preview_bundle(response: &MessageResponse) -> PushPreviewBundle {
             emoji: sticker.emoji.clone(),
         })
     });
-    let first_attachment_kind = response
+    let push_attachments: Vec<MessagePreviewAttachment> = response
         .attachments
-        .first()
-        .map(|attachment| attachment.kind.clone());
+        .iter()
+        .map(|a| MessagePreviewAttachment {
+            kind: a.kind.clone(),
+        })
+        .collect();
     let is_deleted = response.is_deleted;
 
     let body_preview = if is_deleted {
@@ -484,9 +516,10 @@ fn build_push_preview_bundle(response: &MessageResponse) -> PushPreviewBundle {
             MessageType::Sticker => Some(sticker_preview_text(
                 response.sticker.as_ref().map(|s| s.emoji.as_str()),
             )),
-            MessageType::File => {
-                Some(attachment_preview_text(first_attachment_kind.as_deref()).to_string())
-            }
+            MessageType::File => Some(
+                attachment_preview_text(push_attachments.first().map(|a| a.kind.as_str()))
+                    .to_string(),
+            ),
             _ => rendered_message.clone(),
         }
     };
@@ -505,7 +538,7 @@ fn build_push_preview_bundle(response: &MessageResponse) -> PushPreviewBundle {
             message: preview_message,
             message_type: response.message_type.clone(),
             sticker,
-            first_attachment_kind,
+            attachments: push_attachments,
             is_deleted,
         },
         body_preview,
@@ -1001,48 +1034,27 @@ pub async fn attach_metadata(
                     );
                 }
 
-                let mut preview = MessagePreview {
-                    id: reply_msg.id,
-                    client_generated_id: reply_msg.client_generated_id.clone(),
-                    created_at: reply_msg.created_at,
-                    sender: build_sender(reply_msg.sender_uid, &user_avatars, &user_profiles),
-                    message: if reply_msg.deleted_at.is_some() {
-                        None
-                    } else {
-                        reply_msg.message.clone()
-                    },
-                    message_type: reply_msg.message_type.clone(),
-                    sticker: reply_msg.sticker_id.and_then(|sticker_id| {
-                        sticker_rows.get(&sticker_id).and_then(|(sticker, _)| {
-                            (reply_msg.deleted_at.is_none()).then_some(MessagePreviewSticker {
-                                emoji: sticker.emoji.clone(),
-                            })
-                        })
-                    }),
-                    first_attachment_kind: first_attachment_kind(
-                        &message_attachments_map,
-                        reply_msg.id,
-                    ),
-                    attachments: attachment_previews(
-                        &message_attachments_map,
-                        reply_msg.id,
-                    ),
-                    is_deleted: reply_msg.deleted_at.is_some(),
-                    mentions: reply_msg
-                        .message
-                        .as_deref()
-                        .filter(|_| reply_msg.deleted_at.is_none())
-                        .map(|text| {
-                            extract_mention_uids(text)
-                                .into_iter()
-                                .map(|uid| {
-                                    build_mention_info(uid, &user_avatars, &user_profiles)
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                };
-                redact_deleted_message_preview(&mut preview);
+                let sticker_emoji_map: std::collections::HashMap<i64, String> = sticker_rows
+                    .iter()
+                    .map(|(&id, (sticker, _))| (id, sticker.emoji.clone()))
+                    .collect();
+                let preview = build_message_preview(
+                    reply_msg.id,
+                    reply_msg.client_generated_id.clone(),
+                    reply_msg.created_at,
+                    build_sender(reply_msg.sender_uid, &user_avatars, &user_profiles),
+                    reply_msg.message.clone(),
+                    reply_msg.message_type.clone(),
+                    reply_msg.sticker_id,
+                    &sticker_emoji_map,
+                    attachment_previews(&message_attachments_map, reply_msg.id),
+                    reply_msg.deleted_at,
+                    reply_msg.message.as_deref(),
+                    None,
+                    None,
+                    &user_avatars,
+                    &user_profiles,
+                );
                 Box::new(preview)
             })
         });
@@ -1749,11 +1761,11 @@ pub fn router() -> OpenApiRouter<crate::AppState> {
 #[cfg(test)]
 mod tests {
     use super::{
-        attachment_preview_text, build_push_preview_bundle, extract_mention_uids,
-        first_attachment_kind, message_is_visible_in_thread_scope, redact_deleted_message_preview,
-        redact_deleted_message_response, render_mentions_as_text, sticker_preview_text,
-        MentionInfo, MessagePreview, MessagePreviewAttachment, MessageResponse,
-        MessageStickerResponse, PreparedMessageSend, ReactionSummary, StickerMediaResponse,
+        attachment_preview_text, build_message_preview, build_push_preview_bundle,
+        extract_mention_uids, message_is_visible_in_thread_scope, redact_deleted_message_response,
+        render_mentions_as_text, sticker_preview_text, MentionInfo, MessagePreview,
+        MessagePreviewAttachment, MessageResponse, MessageStickerResponse, PreparedMessageSend,
+        ReactionSummary, StickerMediaResponse,
     };
     use crate::{
         dto::{attachments::AttachmentResponse, users::User},
@@ -2073,8 +2085,10 @@ mod tests {
             Some("look at this".to_string())
         );
         assert_eq!(
-            preview.message_preview.first_attachment_kind,
-            Some("image/png".to_string())
+            preview.message_preview.attachments,
+            vec![MessagePreviewAttachment {
+                kind: "image/png".to_string()
+            }]
         );
     }
 
@@ -2094,7 +2108,6 @@ mod tests {
             message: Some("voice".to_string()),
             message_type: MessageType::Audio,
             sticker: None,
-            first_attachment_kind: Some("audio/webm".to_string()),
             attachments: vec![MessagePreviewAttachment {
                 kind: "audio/webm".to_string(),
             }],
@@ -2106,38 +2119,8 @@ mod tests {
         assert_eq!(value["clientGeneratedId"], json!("cgid"));
         assert_eq!(value["messageType"], json!("audio"));
         assert_eq!(value["isDeleted"], json!(false));
-        assert_eq!(value["firstAttachmentKind"], json!("audio/webm"));
         assert_eq!(value["attachments"], json!([{"kind": "audio/webm"}]));
         assert!(value.get("message_type").is_none());
-    }
-
-    #[test]
-    fn first_attachment_kind_can_be_read_multiple_times_for_same_message() {
-        let attachment = Attachment {
-            id: 1,
-            message_id: Some(42),
-            file_name: "image.png".to_string(),
-            kind: "image/png".to_string(),
-            external_reference: "attachments/image.png".to_string(),
-            size: 123,
-            created_at: Utc::now(),
-            deleted_at: None,
-            width: Some(100),
-            height: Some(100),
-            order: 0,
-        };
-
-        let mut attachments_map = HashMap::new();
-        attachments_map.insert(42, vec![attachment]);
-
-        assert_eq!(
-            first_attachment_kind(&attachments_map, 42),
-            Some("image/png".to_string())
-        );
-        assert_eq!(
-            first_attachment_kind(&attachments_map, 42),
-            Some("image/png".to_string())
-        );
     }
 
     #[test]
@@ -2220,32 +2203,27 @@ mod tests {
     }
 
     #[test]
-    fn deleted_message_preview_redaction_preserves_metadata_only() {
-        let mut preview = MessagePreview {
-            id: 10,
-            client_generated_id: "client-10".to_string(),
-            created_at: Utc::now(),
-            sender: sender(),
-            message: Some("secret root".to_string()),
-            message_type: MessageType::Text,
-            sticker: Some(super::MessagePreviewSticker {
-                emoji: "🙂".to_string(),
-            }),
-            first_attachment_kind: Some("image/png".to_string()),
-            attachments: vec![MessagePreviewAttachment {
+    fn build_message_preview_deleted_message_clears_sensitive_data() {
+        let sticker_map = HashMap::from([(42, "🙂".to_string())]);
+        let preview = build_message_preview(
+            10,
+            "client-10".to_string(),
+            Utc::now(),
+            sender(),
+            Some("secret root".to_string()),
+            MessageType::Text,
+            Some(42),
+            &sticker_map,
+            vec![MessagePreviewAttachment {
                 kind: "image/png".to_string(),
             }],
-            is_deleted: true,
-            mentions: vec![MentionInfo {
-                uid: 9,
-                username: Some("Mentioned".to_string()),
-                avatar_url: None,
-                gender: 0,
-                user_group: None,
-            }],
-        };
-
-        redact_deleted_message_preview(&mut preview);
+            Some(Utc::now()),
+            Some("@mention"),
+            None,
+            None,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
 
         assert_eq!(preview.id, 10);
         assert_eq!(preview.client_generated_id, "client-10");
@@ -2253,7 +2231,6 @@ mod tests {
         assert!(preview.is_deleted);
         assert_eq!(preview.message, None);
         assert!(preview.sticker.is_none());
-        assert!(preview.first_attachment_kind.is_none());
         assert!(preview.attachments.is_empty());
         assert!(preview.mentions.is_empty());
     }

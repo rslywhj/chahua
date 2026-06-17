@@ -42,7 +42,6 @@ function deletedThreadRootPreviewPatch(): Partial<MessagePreview> {
     message: null,
     sticker: null,
     attachments: [],
-    firstAttachmentKind: null,
     mentions: [],
   };
 }

@@ -275,7 +275,6 @@ const messagesSlice = createSlice({
                 current.replyToMessage.sticker = message.sticker;
                 current.replyToMessage.isDeleted = message.isDeleted;
                 current.replyToMessage.attachments = message.attachments;
-                current.replyToMessage.firstAttachmentKind = message.attachments?.[0]?.kind;
                 current.replyToMessage.mentions = message.mentions;
               }
             }

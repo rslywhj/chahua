@@ -160,6 +160,7 @@ mod tests {
         MESSAGE_PREVIEW_MAX,
     };
     use super::*;
+    use crate::dto::messages::MessagePreviewAttachment;
     use crate::models::MessageType;
     use a2::ErrorReason as ApnsErrorReason;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -206,7 +207,7 @@ mod tests {
                 sticker: Some(PushMessagePreviewSticker {
                     emoji: "🙂".to_string(),
                 }),
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: Some("[Sticker] 🙂".to_string()),
@@ -251,7 +252,7 @@ mod tests {
                 message: Some("Hello".to_string()),
                 message_type: MessageType::Text,
                 sticker: None,
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: Some("hello there".to_string()),
@@ -287,7 +288,7 @@ mod tests {
                 message: None,
                 message_type: MessageType::Text,
                 sticker: None,
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: None,
@@ -315,7 +316,7 @@ mod tests {
                 message: None,
                 message_type: MessageType::Audio,
                 sticker: None,
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: None,
@@ -343,7 +344,7 @@ mod tests {
                 sticker: Some(PushMessagePreviewSticker {
                     emoji: "🎉".to_string(),
                 }),
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: Some("[Sticker] 🎉".to_string()),
@@ -369,7 +370,9 @@ mod tests {
                 message: None,
                 message_type: MessageType::File,
                 sticker: None,
-                first_attachment_kind: Some("image/jpeg".to_string()),
+                attachments: vec![MessagePreviewAttachment {
+                    kind: "image/jpeg".to_string(),
+                }],
                 is_deleted: false,
             },
             body_preview: None,
@@ -395,7 +398,9 @@ mod tests {
                 message: Some("look at this".to_string()),
                 message_type: MessageType::File,
                 sticker: None,
-                first_attachment_kind: Some("image/jpeg".to_string()),
+                attachments: vec![MessagePreviewAttachment {
+                    kind: "image/jpeg".to_string(),
+                }],
                 is_deleted: false,
             },
             body_preview: Some("[Image]".to_string()),
@@ -424,7 +429,9 @@ mod tests {
                 message: None,
                 message_type: MessageType::File,
                 sticker: None,
-                first_attachment_kind: Some("video/mp4".to_string()),
+                attachments: vec![MessagePreviewAttachment {
+                    kind: "video/mp4".to_string(),
+                }],
                 is_deleted: false,
             },
             body_preview: None,
@@ -449,7 +456,7 @@ mod tests {
                 message: None,
                 message_type: MessageType::Invite,
                 sticker: None,
-                first_attachment_kind: None,
+                attachments: Vec::new(),
                 is_deleted: false,
             },
             body_preview: Some("sent an invite".to_string()),

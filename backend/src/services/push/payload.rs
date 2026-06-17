@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::dto::messages::MessagePreviewAttachment;
 use crate::models::MessageType;
 
 use super::PushJob;
@@ -42,8 +43,7 @@ pub struct PushMessagePreview {
     pub message_type: MessageType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sticker: Option<PushMessagePreviewSticker>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub first_attachment_kind: Option<String>,
+    pub attachments: Vec<MessagePreviewAttachment>,
     pub is_deleted: bool,
 }
 
@@ -128,15 +128,16 @@ pub(super) fn build_apns_notification(job: &PushJob, unread_count: i64) -> ApnsN
             },
             MessageType::Invite => (APNS_BODY_LOC_KEY_INVITE, vec![job.sender_username.clone()]),
             _ => {
-                if let Some(ref kind) = preview.first_attachment_kind {
+                if let Some(first_att) = preview.attachments.first() {
+                    let kind = &first_att.kind;
                     if let Some(ref msg) = preview.message {
                         (
-                            attachment_kind_loc_key_with_preview(kind),
+                            attachment_kind_loc_key(kind, true),
                             vec![job.sender_username.clone(), truncate_preview(msg)],
                         )
                     } else {
                         (
-                            attachment_kind_loc_key(kind),
+                            attachment_kind_loc_key(kind, false),
                             vec![job.sender_username.clone()],
                         )
                     }
@@ -179,27 +180,16 @@ pub(super) fn build_apns_notification(job: &PushJob, unread_count: i64) -> ApnsN
     }
 }
 
-fn attachment_kind_loc_key(kind: &str) -> &'static str {
-    if kind.starts_with("image/") {
-        APNS_BODY_LOC_KEY_IMAGE
-    } else if kind.starts_with("video/") {
-        APNS_BODY_LOC_KEY_VIDEO
-    } else if kind.starts_with("audio/") {
-        APNS_BODY_LOC_KEY_AUDIO
-    } else {
-        APNS_BODY_LOC_KEY_ATTACHMENT
-    }
-}
-
-fn attachment_kind_loc_key_with_preview(kind: &str) -> &'static str {
-    if kind.starts_with("image/") {
-        APNS_BODY_LOC_KEY_IMAGE_WITH_PREVIEW
-    } else if kind.starts_with("video/") {
-        APNS_BODY_LOC_KEY_VIDEO_WITH_PREVIEW
-    } else if kind.starts_with("audio/") {
-        APNS_BODY_LOC_KEY_AUDIO_WITH_PREVIEW
-    } else {
-        APNS_BODY_LOC_KEY_ATTACHMENT_WITH_PREVIEW
+fn attachment_kind_loc_key(kind: &str, with_preview: bool) -> &'static str {
+    match (kind.split('/').next(), with_preview) {
+        (Some("image"), false) => APNS_BODY_LOC_KEY_IMAGE,
+        (Some("image"), true) => APNS_BODY_LOC_KEY_IMAGE_WITH_PREVIEW,
+        (Some("video"), false) => APNS_BODY_LOC_KEY_VIDEO,
+        (Some("video"), true) => APNS_BODY_LOC_KEY_VIDEO_WITH_PREVIEW,
+        (Some("audio"), false) => APNS_BODY_LOC_KEY_AUDIO,
+        (Some("audio"), true) => APNS_BODY_LOC_KEY_AUDIO_WITH_PREVIEW,
+        (_, false) => APNS_BODY_LOC_KEY_ATTACHMENT,
+        (_, true) => APNS_BODY_LOC_KEY_ATTACHMENT_WITH_PREVIEW,
     }
 }
 

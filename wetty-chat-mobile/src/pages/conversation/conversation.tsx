@@ -500,7 +500,6 @@ function ConversationPane({ chatId, threadId, backAction }: ConversationPaneProp
                   messageType: replyingTo.messageType,
                   text: replyingTo.message,
                   attachments: replyingTo.attachments,
-                  firstAttachmentKind: replyingTo.attachments?.[0]?.kind,
                   isDeleted: replyingTo.isDeleted,
                   mentions: replyingTo.mentions,
                 }
