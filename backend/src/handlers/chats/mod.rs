@@ -349,23 +349,39 @@ fn attachment_previews(
         .unwrap_or_default()
 }
 
+pub(crate) struct MessagePreviewInput {
+    pub id: i64,
+    pub client_generated_id: String,
+    pub created_at: DateTime<Utc>,
+    pub sender: User,
+    pub message: Option<String>,
+    pub message_type: MessageType,
+    pub sticker_id: Option<i64>,
+    pub attachments: Vec<MessagePreviewAttachment>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub mention_source: Option<String>,
+    pub mention_uids: Option<Vec<i32>>,
+}
+
 pub(crate) fn build_message_preview(
-    id: i64,
-    client_generated_id: String,
-    created_at: DateTime<Utc>,
-    sender: User,
-    message: Option<String>,
-    message_type: MessageType,
-    sticker_id: Option<i64>,
+    input: MessagePreviewInput,
     sticker_emoji_map: &std::collections::HashMap<i64, String>,
-    attachments: Vec<MessagePreviewAttachment>,
-    deleted_at: Option<DateTime<Utc>>,
-    mention_source: Option<&str>,
-    mention_uids_map: Option<&std::collections::HashMap<i64, Vec<i32>>>,
-    mention_map_key: Option<i64>,
     user_avatars: &std::collections::HashMap<i32, Option<String>>,
     user_profiles: &std::collections::HashMap<i32, UserProfile>,
 ) -> MessagePreview {
+    let MessagePreviewInput {
+        id,
+        client_generated_id,
+        created_at,
+        sender,
+        message,
+        message_type,
+        sticker_id,
+        attachments,
+        deleted_at,
+        mention_source,
+        mention_uids,
+    } = input;
     let is_deleted = deleted_at.is_some();
     let sticker_emoji = sticker_id.and_then(|sid| sticker_emoji_map.get(&sid).cloned());
     MessagePreview {
@@ -383,21 +399,16 @@ pub(crate) fn build_message_preview(
         mentions: mention_source
             .filter(|_| !is_deleted)
             .map(|text| {
-                extract_mention_uids(text)
+                extract_mention_uids(&text)
                     .into_iter()
                     .map(|uid| build_mention_info(uid, user_avatars, user_profiles))
                     .collect()
             })
             .or_else(|| {
-                mention_uids_map.map(|uids_map| {
-                    uids_map
-                        .get(&mention_map_key.unwrap_or(id))
-                        .map(|uids| {
-                            uids.iter()
-                                .map(|&uid| build_mention_info(uid, user_avatars, user_profiles))
-                                .collect()
-                        })
-                        .unwrap_or_default()
+                mention_uids.map(|uids| {
+                    uids.into_iter()
+                        .map(|uid| build_mention_info(uid, user_avatars, user_profiles))
+                        .collect()
                 })
             })
             .unwrap_or_default(),
@@ -1039,19 +1050,20 @@ pub async fn attach_metadata(
                     .map(|(&id, (sticker, _))| (id, sticker.emoji.clone()))
                     .collect();
                 let preview = build_message_preview(
-                    reply_msg.id,
-                    reply_msg.client_generated_id.clone(),
-                    reply_msg.created_at,
-                    build_sender(reply_msg.sender_uid, &user_avatars, &user_profiles),
-                    reply_msg.message.clone(),
-                    reply_msg.message_type.clone(),
-                    reply_msg.sticker_id,
+                    MessagePreviewInput {
+                        id: reply_msg.id,
+                        client_generated_id: reply_msg.client_generated_id.clone(),
+                        created_at: reply_msg.created_at,
+                        sender: build_sender(reply_msg.sender_uid, &user_avatars, &user_profiles),
+                        message: reply_msg.message.clone(),
+                        message_type: reply_msg.message_type.clone(),
+                        sticker_id: reply_msg.sticker_id,
+                        attachments: attachment_previews(&message_attachments_map, reply_msg.id),
+                        deleted_at: reply_msg.deleted_at,
+                        mention_source: reply_msg.message.clone(),
+                        mention_uids: None,
+                    },
                     &sticker_emoji_map,
-                    attachment_previews(&message_attachments_map, reply_msg.id),
-                    reply_msg.deleted_at,
-                    reply_msg.message.as_deref(),
-                    None,
-                    None,
                     &user_avatars,
                     &user_profiles,
                 );
@@ -1764,12 +1776,12 @@ mod tests {
         attachment_preview_text, build_message_preview, build_push_preview_bundle,
         extract_mention_uids, message_is_visible_in_thread_scope, redact_deleted_message_response,
         render_mentions_as_text, sticker_preview_text, MentionInfo, MessagePreview,
-        MessagePreviewAttachment, MessageResponse, MessageStickerResponse, PreparedMessageSend,
-        ReactionSummary, StickerMediaResponse,
+        MessagePreviewAttachment, MessagePreviewInput, MessageResponse, MessageStickerResponse,
+        PreparedMessageSend, ReactionSummary, StickerMediaResponse,
     };
     use crate::{
         dto::{attachments::AttachmentResponse, users::User},
-        models::{Attachment, Message, MessageType, TranscodeStatus},
+        models::{Message, MessageType, TranscodeStatus},
     };
     use chrono::{TimeZone, Utc};
     use serde_json::json;
@@ -2206,21 +2218,22 @@ mod tests {
     fn build_message_preview_deleted_message_clears_sensitive_data() {
         let sticker_map = HashMap::from([(42, "🙂".to_string())]);
         let preview = build_message_preview(
-            10,
-            "client-10".to_string(),
-            Utc::now(),
-            sender(),
-            Some("secret root".to_string()),
-            MessageType::Text,
-            Some(42),
+            MessagePreviewInput {
+                id: 10,
+                client_generated_id: "client-10".to_string(),
+                created_at: Utc::now(),
+                sender: sender(),
+                message: Some("secret root".to_string()),
+                message_type: MessageType::Text,
+                sticker_id: Some(42),
+                attachments: vec![MessagePreviewAttachment {
+                    kind: "image/png".to_string(),
+                }],
+                deleted_at: Some(Utc::now()),
+                mention_source: Some("@mention".to_string()),
+                mention_uids: None,
+            },
             &sticker_map,
-            vec![MessagePreviewAttachment {
-                kind: "image/png".to_string(),
-            }],
-            Some(Utc::now()),
-            Some("@mention"),
-            None,
-            None,
             &HashMap::new(),
             &HashMap::new(),
         );

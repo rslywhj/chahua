@@ -11,7 +11,9 @@ use crate::dto::{
     users::User,
     ws::{ServerWsMessage, ThreadMembershipChangedPayload, ThreadUpdatePayload},
 };
-use crate::handlers::chats::{build_message_preview, build_sender, extract_mention_uids};
+use crate::handlers::chats::{
+    build_message_preview, build_sender, extract_mention_uids, MessagePreviewInput,
+};
 use crate::models::{Attachment, Message, MessageType};
 use crate::schema::{attachments, messages, stickers, thread_meta, thread_user_states};
 use crate::services::media::build_public_object_url;
@@ -850,22 +852,23 @@ pub fn enrich_thread_list(
         latest_reply_map.insert(
             lr.reply_root_id,
             build_message_preview(
-                lr.id,
-                lr.client_generated_id,
-                lr.created_at,
-                make_sender(lr.sender_uid),
-                lr.message,
-                lr.message_type,
-                lr.sticker_id,
+                MessagePreviewInput {
+                    id: lr.id,
+                    client_generated_id: lr.client_generated_id,
+                    created_at: lr.created_at,
+                    sender: make_sender(lr.sender_uid),
+                    message: lr.message,
+                    message_type: lr.message_type,
+                    sticker_id: lr.sticker_id,
+                    attachments: attachment_preview_all_map
+                        .get(&lr.id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    deleted_at: None,
+                    mention_source: None,
+                    mention_uids: mention_uids_per_reply.get(&lr.reply_root_id).cloned(),
+                },
                 &sticker_emoji_map,
-                attachment_preview_all_map
-                    .get(&lr.id)
-                    .cloned()
-                    .unwrap_or_default(),
-                None,
-                None,
-                Some(&mention_uids_per_reply),
-                Some(lr.reply_root_id),
                 &user_avatars,
                 &user_profiles,
             ),
@@ -884,26 +887,27 @@ pub fn enrich_thread_list(
         .filter_map(|row| {
             let root_msg = root_msg_map.get(&row.thread_root_id)?;
             let root_preview = build_message_preview(
-                root_msg.id,
-                root_msg.client_generated_id.clone(),
-                root_msg.created_at,
-                make_sender(root_msg.sender_uid),
-                root_msg.message.clone(),
-                root_msg.message_type.clone(),
-                root_msg.sticker_id,
-                &sticker_emoji_map,
-                if root_msg.deleted_at.is_none() && root_msg.has_attachments {
-                    attachment_preview_all_map
-                        .get(&root_msg.id)
-                        .cloned()
-                        .unwrap_or_default()
-                } else {
-                    vec![]
+                MessagePreviewInput {
+                    id: root_msg.id,
+                    client_generated_id: root_msg.client_generated_id.clone(),
+                    created_at: root_msg.created_at,
+                    sender: make_sender(root_msg.sender_uid),
+                    message: root_msg.message.clone(),
+                    message_type: root_msg.message_type.clone(),
+                    sticker_id: root_msg.sticker_id,
+                    attachments: if root_msg.deleted_at.is_none() && root_msg.has_attachments {
+                        attachment_preview_all_map
+                            .get(&root_msg.id)
+                            .cloned()
+                            .unwrap_or_default()
+                    } else {
+                        vec![]
+                    },
+                    deleted_at: root_msg.deleted_at,
+                    mention_source: None,
+                    mention_uids: mention_uids_per_root.get(&root_msg.id).cloned(),
                 },
-                root_msg.deleted_at,
-                None,
-                Some(&mention_uids_per_root),
-                Some(root_msg.id),
+                &sticker_emoji_map,
                 &user_avatars,
                 &user_profiles,
             );
